@@ -1,0 +1,46 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SecureShop.API", "SecureShop.API\SecureShop.API.csproj", "{7A04A029-73E0-4FC8-AD4F-203F48932EED}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SecureShop.Application", "SecureShop.Application\SecureShop.Application.csproj", "{F4531405-0FF3-4E38-A837-F06CA1C9FA5C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SecureShop.Domain", "SecureShop.Domain\SecureShop.Domain.csproj", "{564E6153-F86B-438A-92E1-67005CA3B703}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SecureShop.Infrastructure", "SecureShop.Infrastructure\SecureShop.Infrastructure.csproj", "{85177A7B-7198-49FA-BEB6-3027D6CDBBAB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SecureShop.UnitTests", "SecureShop.UnitTests\SecureShop.UnitTests.csproj", "{34D16199-C6EE-440C-96E7-399760F85CEF}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{7A04A029-73E0-4FC8-AD4F-203F48932EED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7A04A029-73E0-4FC8-AD4F-203F48932EED}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7A04A029-73E0-4FC8-AD4F-203F48932EED}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7A04A029-73E0-4FC8-AD4F-203F48932EED}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F4531405-0FF3-4E38-A837-F06CA1C9FA5C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F4531405-0FF3-4E38-A837-F06CA1C9FA5C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F4531405-0FF3-4E38-A837-F06CA1C9FA5C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F4531405-0FF3-4E38-A837-F06CA1C9FA5C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{564E6153-F86B-438A-92E1-67005CA3B703}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{564E6153-F86B-438A-92E1-67005CA3B703}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{564E6153-F86B-438A-92E1-67005CA3B703}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{564E6153-F86B-438A-92E1-67005CA3B703}.Release|Any CPU.Build.0 = Release|Any CPU
+		{85177A7B-7198-49FA-BEB6-3027D6CDBBAB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{85177A7B-7198-49FA-BEB6-3027D6CDBBAB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{85177A7B-7198-49FA-BEB6-3027D6CDBBAB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{85177A7B-7198-49FA-BEB6-3027D6CDBBAB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{34D16199-C6EE-440C-96E7-399760F85CEF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{34D16199-C6EE-440C-96E7-399760F85CEF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{34D16199-C6EE-440C-96E7-399760F85CEF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{34D16199-C6EE-440C-96E7-399760F85CEF}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
