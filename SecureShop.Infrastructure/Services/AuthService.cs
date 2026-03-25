@@ -38,7 +38,7 @@ public class AuthService : IAuthService
             throw new DomainException(string.Join(", ", result.Errors.Select(e => e.Description)));
 
         await _userManager.AddToRoleAsync(user, "Customer");
-        return GenerateToken(user);
+        return await GenerateTokenAsync(user);
     }
 
     public async Task<AuthResponseDto> LoginAsync(LoginDto dto)
@@ -49,20 +49,24 @@ public class AuthService : IAuthService
         if (!await _userManager.CheckPasswordAsync(user, dto.Password))
             throw new DomainException("Invalid credentials");
 
-        return GenerateToken(user);
+        return await GenerateTokenAsync(user);
     }
 
-    private AuthResponseDto GenerateToken(ApplicationUser user)
+    private async Task<AuthResponseDto> GenerateTokenAsync(ApplicationUser user)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Secret"]!));
         var expires = DateTime.UtcNow.AddHours(8);
-        var claims = new[]
+        var claims = new List<Claim>
         {
             new Claim(ClaimTypes.NameIdentifier, user.Id),
             new Claim(ClaimTypes.Email, user.Email!),
             new Claim(ClaimTypes.GivenName, user.FirstName),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
+
+        var roles = await _userManager.GetRolesAsync(user);
+        claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
+
         var token = new JwtSecurityToken(
             issuer: _config["Jwt:Issuer"], audience: _config["Jwt:Audience"],
             claims: claims, expires: expires,
