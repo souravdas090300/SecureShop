@@ -54,6 +54,7 @@ TestResult.xml
 nunit-*.xml
 
 # Local environment and secret override files
+appsettings.Development.json
 .env
 .env.*
 SecureShop.API/appsettings.Local.json
