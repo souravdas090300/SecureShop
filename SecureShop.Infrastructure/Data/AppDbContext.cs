@@ -36,7 +36,11 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>
         {
             e.HasKey(oi => oi.Id);
             e.Property(oi => oi.UnitPrice).HasPrecision(18, 2);
-            e.HasOne(oi => oi.Product).WithMany().HasForeignKey(oi => oi.ProductId);
+            e.HasOne(oi => oi.Product)
+                .WithMany()
+                .HasForeignKey(oi => oi.ProductId)
+                .IsRequired(false)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

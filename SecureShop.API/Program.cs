@@ -1,6 +1,7 @@
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -87,28 +88,50 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
-app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseMiddleware<GlobalExceptionMiddleware>();
-app.UseSwagger();
-app.UseSwaggerUI(c => { c.SwaggerEndpoint("/swagger/v1/swagger.json", "SecureShop API v1"); c.RoutePrefix = string.Empty; });
-app.UseHttpsRedirection();
-app.UseHsts();
+app.UseMiddleware<CacheBustingMiddleware>();
+app.UseStaticFiles();
+
+app.UseSwagger(options =>
+{
+    options.SerializeAsV2 = false;
+});
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "SecureShop API v1");
+    c.RoutePrefix = string.Empty;
+    c.InjectStylesheet("/swagger-ui/custom.css");
+    c.ConfigObject.DeepLinking = true;
+    c.EnableDeepLinking();
+});
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+    app.UseHsts();
+}
+app.UseMiddleware<SecurityHeadersMiddleware>();
 app.UseCors("Production");
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
+Log.Information("Startup init: database migration starting");
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<SecureShop.Infrastructure.AppDbContext>();
-    db.Database.Migrate();
+    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await dbContext.Database.MigrateAsync();
+    Log.Information("Startup init: database migration completed");
 
-    var roleManager = scope.ServiceProvider
-        .GetRequiredService<Microsoft.AspNetCore.Identity.RoleManager<Microsoft.AspNetCore.Identity.IdentityRole>>();
-    foreach (var role in new[] { "Admin", "Customer" })
+    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+    foreach (var role in new[] { "Admin", "User" })
         if (!await roleManager.RoleExistsAsync(role))
-            await roleManager.CreateAsync(new Microsoft.AspNetCore.Identity.IdentityRole(role));
+            await roleManager.CreateAsync(new IdentityRole(role));
+
+    Log.Information("Startup init: role seeding completed");
 }
 
+
+Log.Information("Startup init: finished, starting web host");
 app.Run();

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using SecureShop.Application.Interfaces;
 using SecureShop.Domain.Entities;
 using SecureShop.Infrastructure.Services;
@@ -14,8 +15,20 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructureServices(
         this IServiceCollection services, IConfiguration config)
     {
+        var defaultConnection = config.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection not configured");
+
+        // Prevent startup from hanging indefinitely on remote database issues.
+        var npgsqlBuilder = new NpgsqlConnectionStringBuilder(defaultConnection)
+        {
+            Timeout = 10,
+            CommandTimeout = 15
+        };
+
         services.AddDbContext<AppDbContext>(options =>
-            options.UseNpgsql(config.GetConnectionString("DefaultConnection")));
+            options.UseNpgsql(
+                npgsqlBuilder.ConnectionString,
+                npgsql => npgsql.EnableRetryOnFailure(3).CommandTimeout(15)));
 
         services.AddIdentity<ApplicationUser, IdentityRole>(options =>
         {
@@ -30,8 +43,11 @@ public static class DependencyInjection
         .AddEntityFrameworkStores<AppDbContext>()
         .AddDefaultTokenProviders();
 
-        services.AddSingleton<IConnectionMultiplexer>(
-            ConnectionMultiplexer.Connect(config.GetConnectionString("Redis")!));
+        var redisConfig = ConfigurationOptions.Parse(config.GetConnectionString("Redis")!);
+        redisConfig.ConnectTimeout = 5000;
+        redisConfig.AbortOnConnectFail = true;
+        var redis = ConnectionMultiplexer.Connect(redisConfig);
+        services.AddSingleton<IConnectionMultiplexer>(redis);
         services.AddScoped<ICacheService, CacheService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IPaymentService, PaymentService>();
