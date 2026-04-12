@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["dotnetCorePackages.sdk_9_0"]
+
+[phases.install]
+cmds = ["dotnet restore SecureShop.API.csproj"]
+
+[phases.build]
+cmds = ["dotnet publish SecureShop.API.csproj -c Release -o out"]
+
+[start]
+cmd = "dotnet out/SecureShop.API.dll"
