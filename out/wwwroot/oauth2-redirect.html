@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Swagger UI OAuth2 Redirect</title>
+</head>
+<body>
+    <script>
+        function parseQueryString() {
+            var qs = window.location.hash.substr(1);
+            var pairs = qs.split('&');
+            var obj = {};
+            for (var i = 0; i < pairs.length; i++) {
+                var parts = pairs[i].split('=');
+                obj[decodeURIComponent(parts[0])] = decodeURIComponent(parts[1]);
+            }
+            return obj;
+        }
+
+        var params = parseQueryString();
+        
+        if (window.opener && window.opener.swaggerUIRedirectHandler) {
+            window.opener.swaggerUIRedirectHandler(params);
+            window.close();
+        }
+    </script>
+</body>
+</html>
