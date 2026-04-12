@@ -1,0 +1,10 @@
+[build]
+builder = "NIXPACKS"
+buildCommand = "dotnet restore SecureShop.sln && dotnet publish SecureShop.API/SecureShop.API.csproj -c Release -o out"
+
+[deploy]
+startCommand = "dotnet out/SecureShop.API.dll"
+healthcheckPath = "/swagger/v1/swagger.json"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
