@@ -15,7 +15,7 @@ public class SecurityHeadersMiddleware
     {
         // Skip security headers for Swagger endpoints and static files
         var path = context.Request.Path.Value?.ToLower() ?? "";
-        if (path.StartsWith("/swagger") || path.StartsWith("/swagger-ui.css") || 
+        if (path.StartsWith("/swagger") || path.StartsWith("/docs") || path.StartsWith("/swagger-ui.css") || 
             path.StartsWith("/favicon") || path.StartsWith("/.") || path == "/")
         {
             await _next(context);

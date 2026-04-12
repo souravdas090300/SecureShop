@@ -18,6 +18,10 @@
   min-height: 56px;
   width: 220px;
   padding-left: 190px;
-  background: url('/SecureShop%20logo.svg') no-repeat left center;
+  background: url('/SecureShop logo.svg') no-repeat left center;
   background-size: contain;
+}
+
+.swagger-ui .topbar-wrapper .link span {
+  display: none;
 }

@@ -13,8 +13,18 @@ public class CacheBustingMiddleware
     {
         var path = context.Request.Path.Value?.ToLowerInvariant() ?? "";
         
-        // Check if this is a Swagger/API doc path
-        if (path == "/" || path.StartsWith("/swagger") || path.StartsWith("/api-docs") || path.Contains(".json"))
+        // Ensure docs UI and OpenAPI payload are never served from stale browser cache.
+        if (path == "/" ||
+            path == "/docs" ||
+            path.StartsWith("/docs/") ||
+            path.StartsWith("/swagger") ||
+            path.StartsWith("/api-docs") ||
+            path.StartsWith("/swagger-ui") ||
+            path.EndsWith("swagger-ui-bundle.js") ||
+            path.EndsWith("swagger-ui-standalone-preset.js") ||
+            path.EndsWith("swagger-ui.css") ||
+            path.EndsWith("index.html") ||
+            path.Contains(".json"))
         {
             // Set cache-busting headers before response is sent
             context.Response.OnStarting(() =>
