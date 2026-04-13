@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["dotnetCorePackages.sdk_9_0"]
+nixPkgs = ["dotnetCorePackages.sdk_8_0"]
 
 [phases.install]
 cmds = ["dotnet restore SecureShop.API.csproj"]
