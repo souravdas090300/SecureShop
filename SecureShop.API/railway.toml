@@ -1,6 +1,6 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "dotnet restore SecureShop.API.csproj && dotnet publish SecureShop.API.csproj -c Release -o out"
+buildCommand = "dotnet publish SecureShop.API.csproj -c Release -o out"
 
 [deploy]
 startCommand = "dotnet out/SecureShop.API.dll"
