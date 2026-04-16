@@ -58,3 +58,9 @@ appsettings.Development.json
 .env
 .env.*
 SecureShop.API/appsettings.Local.json
+
+# Nixpacks generated cache — never commit
+.nixpacks/
+
+# Published output — never commit
+out/
