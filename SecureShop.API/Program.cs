@@ -218,6 +218,9 @@ app.UseAuthorization();
 // ── 7. Endpoints ──────────────────────────────────────────────────────────────
 app.MapControllers();
 
+// Health check — available in all environments for Railway
+app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+
 // Docs endpoints (development only)
 if (app.Environment.IsDevelopment())
 {
