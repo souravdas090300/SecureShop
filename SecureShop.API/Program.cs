@@ -126,6 +126,10 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// ── Port (Railway injects PORT env var) ─────────────────────────────────────
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+
 // ═════════════════════════════════════════════════════════════════════════════
 var app = builder.Build();
 // ═════════════════════════════════════════════════════════════════════════════
@@ -267,8 +271,9 @@ else
 
 // ── Database migration & seeding ─────────────────────────────────────────────
 Log.Information("Startup init: database migration starting");
-using (var scope = app.Services.CreateScope())
+try
 {
+    using var scope = app.Services.CreateScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await dbContext.Database.MigrateAsync();
     Log.Information("Startup init: database migration completed");
@@ -279,6 +284,10 @@ using (var scope = app.Services.CreateScope())
             await roleManager.CreateAsync(new IdentityRole(role));
 
     Log.Information("Startup init: role seeding completed");
+}
+catch (Exception ex)
+{
+    Log.Error(ex, "Startup init: database migration failed — ensure ConnectionStrings__DefaultConnection is set in Railway env vars");
 }
 
 Log.Information("Startup init: finished, starting web host");

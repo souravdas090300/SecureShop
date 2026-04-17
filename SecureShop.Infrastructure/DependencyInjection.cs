@@ -43,12 +43,27 @@ public static class DependencyInjection
         .AddEntityFrameworkStores<AppDbContext>()
         .AddDefaultTokenProviders();
 
-        var redisConfig = ConfigurationOptions.Parse(config.GetConnectionString("Redis")!);
-        redisConfig.ConnectTimeout = 5000;
-        redisConfig.AbortOnConnectFail = true;
-        var redis = ConnectionMultiplexer.Connect(redisConfig);
-        services.AddSingleton<IConnectionMultiplexer>(redis);
-        services.AddScoped<ICacheService, CacheService>();
+        var redisConnectionString = config.GetConnectionString("Redis");
+        if (!string.IsNullOrEmpty(redisConnectionString))
+        {
+            try
+            {
+                var redisConfig = ConfigurationOptions.Parse(redisConnectionString);
+                redisConfig.ConnectTimeout = 5000;
+                redisConfig.AbortOnConnectFail = false;
+                var redis = ConnectionMultiplexer.Connect(redisConfig);
+                services.AddSingleton<IConnectionMultiplexer>(redis);
+                services.AddScoped<ICacheService, CacheService>();
+            }
+            catch
+            {
+                services.AddScoped<ICacheService, NullCacheService>();
+            }
+        }
+        else
+        {
+            services.AddScoped<ICacheService, NullCacheService>();
+        }
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IPaymentService, PaymentService>();
         services.AddScoped<IProductRepository, ProductRepository>();
