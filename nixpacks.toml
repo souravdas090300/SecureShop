@@ -2,7 +2,7 @@
 nixPkgs = ["dotnetCorePackages.sdk_8_0"]
 
 [phases.install]
-cmds = ["rm -f global.json", "dotnet restore SecureShop.API/SecureShop.API.csproj"]
+cmds = ["dotnet restore SecureShop.API/SecureShop.API.csproj"]
 
 [phases.build]
 cmds = ["dotnet publish SecureShop.API/SecureShop.API.csproj -c Release -o out"]
