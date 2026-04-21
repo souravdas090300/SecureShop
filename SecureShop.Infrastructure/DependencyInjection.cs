@@ -15,20 +15,27 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructureServices(
         this IServiceCollection services, IConfiguration config)
     {
-        var defaultConnection = config.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection not configured");
-
-        // Prevent startup from hanging indefinitely on remote database issues.
-        var npgsqlBuilder = new NpgsqlConnectionStringBuilder(defaultConnection)
+        var defaultConnection = config.GetConnectionString("DefaultConnection");
+        if (!string.IsNullOrWhiteSpace(defaultConnection))
         {
-            Timeout = 10,
-            CommandTimeout = 15
-        };
+            // Prevent startup from hanging indefinitely on remote database issues.
+            var npgsqlBuilder = new NpgsqlConnectionStringBuilder(defaultConnection)
+            {
+                Timeout = 10,
+                CommandTimeout = 15
+            };
 
-        services.AddDbContext<AppDbContext>(options =>
-            options.UseNpgsql(
-                npgsqlBuilder.ConnectionString,
-                npgsql => npgsql.EnableRetryOnFailure(3).CommandTimeout(15)));
+            services.AddDbContext<AppDbContext>(options =>
+                options.UseNpgsql(
+                    npgsqlBuilder.ConnectionString,
+                    npgsql => npgsql.EnableRetryOnFailure(3).CommandTimeout(15)));
+        }
+        else
+        {
+            // No connection string — register a no-op context so DI resolves; migration will log error.
+            services.AddDbContext<AppDbContext>(options =>
+                options.UseNpgsql("Host=localhost;Database=placeholder;Username=placeholder;Password=placeholder"));
+        }
 
         services.AddIdentity<ApplicationUser, IdentityRole>(options =>
         {

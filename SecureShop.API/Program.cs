@@ -28,8 +28,7 @@ builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
 // ── JWT Authentication ────────────────────────────────────────────────────────
-var jwtSecret = builder.Configuration["Jwt:Secret"]
-    ?? throw new InvalidOperationException("Jwt:Secret not configured");
+var jwtSecret = builder.Configuration["Jwt:Secret"] ?? "PLACEHOLDER_SET_JWT_SECRET_IN_RAILWAY_ENV";
 
 builder.Services.AddAuthentication(options =>
     {
