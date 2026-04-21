@@ -16,26 +16,36 @@ public static class DependencyInjection
         this IServiceCollection services, IConfiguration config)
     {
         var defaultConnection = config.GetConnectionString("DefaultConnection");
+        string resolvedConnStr;
         if (!string.IsNullOrWhiteSpace(defaultConnection))
         {
-            // Prevent startup from hanging indefinitely on remote database issues.
-            var npgsqlBuilder = new NpgsqlConnectionStringBuilder(defaultConnection)
+            try
             {
-                Timeout = 10,
-                CommandTimeout = 15
-            };
-
-            services.AddDbContext<AppDbContext>(options =>
-                options.UseNpgsql(
-                    npgsqlBuilder.ConnectionString,
-                    npgsql => npgsql.EnableRetryOnFailure(3).CommandTimeout(15)));
+                // Parse and inject timeout settings. NpgsqlConnectionStringBuilder can throw
+                // ArgumentException for unrecognised keywords — catch so startup never crashes.
+                var npgsqlBuilder = new NpgsqlConnectionStringBuilder(defaultConnection)
+                {
+                    Timeout = 10,
+                    CommandTimeout = 15
+                };
+                resolvedConnStr = npgsqlBuilder.ConnectionString;
+            }
+            catch
+            {
+                // Fallback: Npgsql will validate the raw string at connect time.
+                resolvedConnStr = defaultConnection;
+            }
         }
         else
         {
-            // No connection string — register a no-op context so DI resolves; migration will log error.
-            services.AddDbContext<AppDbContext>(options =>
-                options.UseNpgsql("Host=localhost;Database=placeholder;Username=placeholder;Password=placeholder"));
+            // No connection string configured — use a placeholder so DI resolves.
+            // Migration will log an error at startup; set ConnectionStrings__DefaultConnection in Railway.
+            resolvedConnStr = "Host=localhost;Database=placeholder;Username=placeholder;Password=placeholder";
         }
+
+        services.AddDbContext<AppDbContext>(options =>
+            options.UseNpgsql(resolvedConnStr,
+                npgsql => npgsql.EnableRetryOnFailure(3).CommandTimeout(15)));
 
         services.AddIdentity<ApplicationUser, IdentityRole>(options =>
         {

@@ -126,8 +126,11 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // ── Port (Railway injects PORT env var) ─────────────────────────────────────
-var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
-builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+// ConfigureKestrel with ListenAnyIP takes highest precedence and cannot be
+// overridden by ASPNETCORE_URLS, making it the most reliable way to bind the
+// Railway PORT variable.
+var port = int.Parse(Environment.GetEnvironmentVariable("PORT") ?? "8080");
+builder.WebHost.ConfigureKestrel(options => options.ListenAnyIP(port));
 
 // ═════════════════════════════════════════════════════════════════════════════
 var app = builder.Build();
@@ -267,38 +270,40 @@ else
     app.MapGet("/", () => Results.NotFound());
 }
 
-// ── Database migration & seeding ─────────────────────────────────────────────
-Log.Information("Startup init: database migration starting");
-try
-{
-    using var scope = app.Services.CreateScope();
-    var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await dbContext.Database.MigrateAsync();
-    Log.Information("Startup init: database migration completed");
-
-    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-    foreach (var role in new[] { "Admin", "User" })
-        if (!await roleManager.RoleExistsAsync(role))
-            await roleManager.CreateAsync(new IdentityRole(role));
-
-    Log.Information("Startup init: role seeding completed");
-}
-catch (Exception ex)
-{
-    Log.Error(ex, "Startup init: database migration failed — ensure ConnectionStrings__DefaultConnection is set in Railway env vars");
-}
-
+// ── Database migration & seeding (background — runs AFTER server starts) ─────
+// Running migration before app.Run() blocks the port from opening, causing
+// Railway's healthcheck to see "service unavailable" while EF Core retries.
+// ApplicationStarted fires once Kestrel is fully bound and serving.
 Log.Information("Startup init: finished, starting web host");
 app.Lifetime.ApplicationStarted.Register(() =>
 {
     var server = app.Services.GetRequiredService<IServer>();
     var addresses = server.Features.Get<IServerAddressesFeature>()?.Addresses;
     if (addresses is not null)
-    {
         foreach (var address in addresses)
-        {
             Log.Information("Listening on {Address}", address);
+
+    _ = Task.Run(async () =>
+    {
+        Log.Information("Startup init: database migration starting (background)");
+        try
+        {
+            using var scope = app.Services.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await dbContext.Database.MigrateAsync();
+            Log.Information("Startup init: database migration completed");
+
+            var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+            foreach (var role in new[] { "Admin", "User" })
+                if (!await roleManager.RoleExistsAsync(role))
+                    await roleManager.CreateAsync(new IdentityRole(role));
+
+            Log.Information("Startup init: role seeding completed");
         }
-    }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Startup init: database migration failed — ensure ConnectionStrings__DefaultConnection is set in Railway env vars");
+        }
+    });
 });
 app.Run();
