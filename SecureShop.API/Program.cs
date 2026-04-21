@@ -205,12 +205,11 @@ app.UseStaticFiles();
 app.UseMiddleware<CacheBustingMiddleware>();
 app.UseMiddleware<SecurityHeadersMiddleware>();
 
-// ── 5. HTTPS / HSTS (non-dev only) ───────────────────────────────────────────
-if (!app.Environment.IsDevelopment())
-{
-    app.UseHttpsRedirection();
-    app.UseHsts();
-}
+// ── 5. HTTPS / HSTS ──────────────────────────────────────────────────────────
+// Railway terminates TLS at the load balancer; the container only sees plain
+// HTTP.  Enabling UseHttpsRedirection here would 301-redirect Railway's health
+// checker and every real request, breaking everything.  HSTS is also handled
+// externally on Railway, so both are intentionally omitted.
 
 // ── 6. Framework middleware ───────────────────────────────────────────────────
 app.UseCors("Production");
