@@ -13,15 +13,30 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 
+// ── Early crash handler — visible in Railway deploy logs before Serilog starts ──
+AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+    Console.Error.WriteLine($"[FATAL] UnhandledException: {e.ExceptionObject}");
+Console.WriteLine("[STARTUP] Process started");
+
 var builder = WebApplication.CreateBuilder(args);
+Console.WriteLine($"[STARTUP] Environment: {builder.Environment.EnvironmentName}");
 
 // ── Logging ──────────────────────────────────────────────────────────────────
-Log.Logger = new LoggerConfiguration()
-    .ReadFrom.Configuration(builder.Configuration)
-    .Enrich.FromLogContext()
-    .WriteTo.Console()
-    .CreateLogger();
-builder.Host.UseSerilog();
+try
+{
+    Log.Logger = new LoggerConfiguration()
+        .ReadFrom.Configuration(builder.Configuration)
+        .Enrich.FromLogContext()
+        .WriteTo.Console()
+        .CreateLogger();
+    builder.Host.UseSerilog();
+    Console.WriteLine("[STARTUP] Serilog configured");
+}
+catch (Exception ex)
+{
+    Console.Error.WriteLine($"[FATAL] Serilog configuration failed: {ex}");
+    // Fall back to default logging so the app can still start
+}
 
 // ── Application & Infrastructure services ────────────────────────────────────
 builder.Services.AddApplicationServices();
@@ -126,11 +141,15 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // ── Port (Railway injects PORT env var) ─────────────────────────────────────
-// ConfigureKestrel with ListenAnyIP takes highest precedence and cannot be
-// overridden by ASPNETCORE_URLS, making it the most reliable way to bind the
-// Railway PORT variable.
-var port = int.Parse(Environment.GetEnvironmentVariable("PORT") ?? "8080");
-builder.WebHost.ConfigureKestrel(options => options.ListenAnyIP(port));
+// Use TryParse — int.Parse throws FormatException if PORT has whitespace or
+// unexpected content, which crashes the process before binding any port.
+var portRaw = Environment.GetEnvironmentVariable("PORT")?.Trim();
+var port = int.TryParse(portRaw, out var p) && p > 0 ? p : 8080;
+Console.WriteLine($"[STARTUP] Binding to port {port} (PORT env={portRaw ?? "(not set)"})");
+builder.WebHost.ConfigureKestrel(kestrel =>
+{
+    kestrel.ListenAnyIP(port);
+});
 
 // ═════════════════════════════════════════════════════════════════════════════
 var app = builder.Build();

@@ -61,26 +61,29 @@ public static class DependencyInjection
         .AddDefaultTokenProviders();
 
         var redisConnectionString = config.GetConnectionString("Redis");
-        if (!string.IsNullOrEmpty(redisConnectionString))
+        // Deferred singleton: do NOT call Connect() here — synchronous Connect()
+        // blocks DI registration for ConnectTimeout (5 s) on invalid hostnames.
+        services.AddSingleton<IConnectionMultiplexer>(sp =>
         {
+            if (string.IsNullOrWhiteSpace(redisConnectionString))
+                return null!;
             try
             {
-                var redisConfig = ConfigurationOptions.Parse(redisConnectionString);
-                redisConfig.ConnectTimeout = 5000;
-                redisConfig.AbortOnConnectFail = false;
-                var redis = ConnectionMultiplexer.Connect(redisConfig);
-                services.AddSingleton<IConnectionMultiplexer>(redis);
-                services.AddScoped<ICacheService, CacheService>();
+                var opts = ConfigurationOptions.Parse(redisConnectionString);
+                opts.ConnectTimeout = 3000;
+                opts.AbortOnConnectFail = false;
+                return ConnectionMultiplexer.Connect(opts);
             }
             catch
             {
-                services.AddScoped<ICacheService, NullCacheService>();
+                return null!;
             }
-        }
-        else
+        });
+        services.AddScoped<ICacheService>(sp =>
         {
-            services.AddScoped<ICacheService, NullCacheService>();
-        }
+            var conn = sp.GetService<IConnectionMultiplexer>();
+            return conn != null ? new CacheService(conn) : new NullCacheService();
+        });
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IPaymentService, PaymentService>();
         services.AddScoped<IProductRepository, ProductRepository>();
