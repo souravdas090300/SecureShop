@@ -2,10 +2,10 @@
 nixPkgs = ["dotnetCorePackages.sdk_8_0"]
 
 [phases.install]
-cmds = ["dotnet restore SecureShop.API/SecureShop.API.csproj"]
+cmds = ["dotnet restore SecureShop.API/SecureShop.API.csproj -r linux-x64"]
 
 [phases.build]
-cmds = ["dotnet publish SecureShop.API/SecureShop.API.csproj -c Release -o out"]
+cmds = ["dotnet publish SecureShop.API/SecureShop.API.csproj -c Release -r linux-x64 --self-contained true -o out && chmod +x out/SecureShop.API"]
 
 [start]
-cmd = "dotnet out/SecureShop.API.dll"
+cmd = "./out/SecureShop.API"
