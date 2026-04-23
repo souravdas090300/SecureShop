@@ -206,9 +206,8 @@ if (app.Environment.IsDevelopment())
 }
 else
 {
-    app.MapGet("/", (HttpContext context) =>
+    app.MapGet("/", () =>
     {
-        context.Response.ContentType = "application/json; charset=utf-8";
         var response = new
         {
             service   = "SecureShop API",
