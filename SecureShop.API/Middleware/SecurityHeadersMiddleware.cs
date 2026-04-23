@@ -13,10 +13,9 @@ public class SecurityHeadersMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        // Skip security headers for Swagger endpoints and static files
+        // Skip security headers only for Swagger endpoints (API documentation)
         var path = context.Request.Path.Value?.ToLower() ?? "";
-        if (path.StartsWith("/swagger") || path.StartsWith("/docs") || path.StartsWith("/swagger-ui.css") || 
-            path.StartsWith("/favicon") || path.StartsWith("/.") || path == "/")
+        if (path.StartsWith("/swagger") || path.StartsWith("/api-docs"))
         {
             await _next(context);
             return;
@@ -33,22 +32,23 @@ public class SecurityHeadersMiddleware
             h["X-Frame-Options"] = "SAMEORIGIN";
             h["Content-Security-Policy"] =
                 "default-src 'self'; " +
-                "script-src 'self' 'unsafe-inline'; " +
-                "style-src 'self' 'unsafe-inline'; " +
-                "img-src 'self' data:; " +
-                "font-src 'self' data:; " +
+                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; " +
+                "img-src 'self' data: https:; " +
+                "font-src 'self' data: https://cdnjs.cloudflare.com; " +
                 "connect-src 'self' https://localhost:5001 http://localhost:5000; " +
-                "frame-ancestors 'self' http://localhost:3000 https://localhost:3001;";
+                "frame-ancestors 'self';";
         }
         else
         {
+            // Production CSP - Allow CDN resources for Bootstrap and Font Awesome
             h["X-Frame-Options"] = "DENY";
             h["Content-Security-Policy"] =
                 "default-src 'self'; " +
-                "script-src 'self'; " +
-                "style-src 'self'; " +
-                "img-src 'self' data:; " +
-                "font-src 'self'; " +
+                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; " +
+                "img-src 'self' data: https:; " +
+                "font-src 'self' data: https://cdnjs.cloudflare.com; " +
                 "base-uri 'self'; " +
                 "form-action 'self'; " +
                 "frame-ancestors 'none';";
