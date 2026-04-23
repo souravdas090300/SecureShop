@@ -157,19 +157,19 @@ app.UseMiddleware<SecurityHeadersMiddleware>();
 // 2. Global exception handler
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
-// 3. Swagger — Development only
-if (app.Environment.IsDevelopment())
+// 3. Swagger — Enable in all environments for Railway
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "SecureShop API v1");
+    c.RoutePrefix  = "swagger";
+    c.DocumentTitle = "SecureShop API Docs";
+    if (app.Environment.IsDevelopment())
     {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "SecureShop API v1");
-        c.RoutePrefix  = "swagger";
-        c.DocumentTitle = "SecureShop API Docs";
         c.InjectStylesheet("/swagger-ui/custom.css");
-        c.EnableDeepLinking();
-    });
-}
+    }
+    c.EnableDeepLinking();
+});
 
 // 4. Static files (serves /swagger-ui/custom.css etc.)
 app.UseStaticFiles();
@@ -198,27 +198,28 @@ app.MapHealthChecks("/health", new HealthCheckOptions
     }
 });
 
-// Root endpoint
-if (app.Environment.IsDevelopment())
+// Root endpoint - Redirect to Swagger documentation
+app.MapGet("/", () => Results.Redirect("/swagger"));
+app.MapGet("/docs", () => Results.Redirect("/swagger"));
+
+// API status endpoint (for monitoring/health checks)
+app.MapGet("/api", () =>
 {
-    app.MapGet("/", () => Results.Redirect("/swagger/"));
-    app.MapGet("/docs", () => Results.Redirect("/swagger/"));
-}
-else
-{
-    app.MapGet("/", () =>
+    var response = new
     {
-        var response = new
-        {
-            service   = "SecureShop API",
-            version   = "1.0.0",
-            status    = "running",
-            timestamp = DateTime.UtcNow,
-            endpoints = new { health = "/health" }
-        };
-        return Results.Json(response);
-    });
-}
+        service   = "SecureShop API",
+        version   = "1.0.0",
+        status    = "running",
+        timestamp = DateTime.UtcNow,
+        endpoints = new 
+        { 
+            swagger = "/swagger",
+            health = "/health",
+            docs = "/docs"
+        }
+    };
+    return Results.Json(response);
+});
 
 // ── Database migration & seeding (background — runs AFTER Kestrel starts) ────
 // Running MigrateAsync before app.Run() blocks the port from opening, causing
