@@ -64,7 +64,7 @@ public class LoginModel : PageModel
         try
         {
             var client = _httpClientFactory.CreateClient();
-            var baseUrl = _configuration["ApiBaseUrl"] ?? "http://localhost:8080";
+            var baseUrl = $"{Request.Scheme}://{Request.Host}";
 
             var loginData = new
             {

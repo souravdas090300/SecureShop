@@ -37,6 +37,7 @@ public class SecurityHeadersMiddleware
                 "img-src 'self' data: https:; " +
                 "font-src 'self' data: https://cdnjs.cloudflare.com; " +
                 "connect-src 'self' https://localhost:5001 http://localhost:5000 http://localhost:8080 https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://accounts.google.com; " +
+                "frame-src 'self' https://accounts.google.com https://*.google.com; " +
                 "frame-ancestors 'self';";
         }
         else
@@ -50,6 +51,7 @@ public class SecurityHeadersMiddleware
                 "img-src 'self' data: https:; " +
                 "font-src 'self' data: https://cdnjs.cloudflare.com; " +
                 "connect-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://accounts.google.com; " +
+                "frame-src 'self' https://accounts.google.com https://*.google.com; " +
                 "base-uri 'self'; " +
                 "form-action 'self'; " +
                 "frame-ancestors 'none';";

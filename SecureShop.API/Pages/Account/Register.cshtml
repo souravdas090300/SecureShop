@@ -30,6 +30,7 @@
                             <i class="fab fa-google me-2"></i> Sign up with Google
                         </button>
                     </div>
+                    <div id="googleRegisterButton" class="d-none"></div>
 
                     <div class="text-center my-3">
                         <span class="text-muted">OR</span>
@@ -125,25 +126,59 @@
 </div>
 
 @section Scripts {
+    <style>
+        .validation-summary-valid {
+            display: none;
+        }
+    </style>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script>
         let googleClientId = '@Model.GoogleClientId';
 
         // Initialize Google Sign-Up
         window.onload = function() {
+            if (!googleClientId) {
+                console.warn('GoogleAuth:ClientId is not configured.');
+                return;
+            }
+
             // Initialize Google Identity Services
             if (typeof google !== 'undefined') {
                 google.accounts.id.initialize({
                     client_id: googleClientId,
                     callback: handleCredentialResponse
                 });
+
+                // Render an official Google button in a hidden container.
+                // We trigger this button from the custom styled button.
+                google.accounts.id.renderButton(
+                    document.getElementById('googleRegisterButton'),
+                    {
+                        type: 'standard',
+                        theme: 'outline',
+                        size: 'large',
+                        text: 'signup_with'
+                    }
+                );
             }
         };
 
         function signUpWithGoogle() {
-            // Trigger Google One Tap or the button flow
+            if (!googleClientId) {
+                alert('Google Sign-Up is not configured yet. Please use email registration or set GoogleAuth:ClientId.');
+                return;
+            }
+
+            // Prefer the rendered GIS button click for reliability.
+            const renderedButton = document.querySelector('#googleRegisterButton iframe, #googleRegisterButton div[role="button"]');
+            if (renderedButton) {
+                renderedButton.click();
+                return;
+            }
+
+            // Fallback to One Tap prompt.
             if (typeof google !== 'undefined') {
-                google.accounts.id.prompt(); // Show One Tap dialog
+                google.accounts.id.prompt();
             } else {
                 alert('Google Sign-In is not loaded yet. Please try again.');
             }
@@ -167,7 +202,7 @@
                     // Store authentication data
                     document.cookie = `AuthToken=${data.token}; path=/; max-age=28800`; // 8 hours
                     document.cookie = `UserEmail=${data.email}; path=/; max-age=28800`;
-                    document.cookie = `UserName=${data.name}; path=/; max-age=28800`;
+                    document.cookie = `UserName=${data.firstName || data.name || ''}; path=/; max-age=28800`;
                     
                     // Redirect to home page
                     window.location.href = '/';
