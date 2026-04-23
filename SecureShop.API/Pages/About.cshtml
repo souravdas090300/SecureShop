@@ -1,0 +1,108 @@
+@page
+@{
+    ViewData["Title"] = "About Us";
+}
+
+<div class="container py-5">
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <h1 class="fw-bold mb-4">About SecureShop</h1>
+            
+            <div class="card shadow-sm mb-4">
+                <div class="card-body">
+                    <h4 class="card-title">
+                        <i class="fas fa-store text-primary"></i> Our Story
+                    </h4>
+                    <p class="lead">
+                        SecureShop is a modern e-commerce platform built with cutting-edge technology to provide you with the best online shopping experience.
+                    </p>
+                    <p>
+                        Founded in 2026, we've been committed to delivering quality products at competitive prices while ensuring the highest standards of security and customer service. Our platform is built on ASP.NET Core 8 with enterprise-grade security features including JWT authentication, rate limiting, and comprehensive data protection.
+                    </p>
+                </div>
+            </div>
+
+            <div class="row g-4 mb-4">
+                <div class="col-md-4">
+                    <div class="card h-100 text-center border-0 shadow-sm">
+                        <div class="card-body">
+                            <i class="fas fa-shield-alt fa-3x text-success mb-3"></i>
+                            <h5 class="card-title">Secure & Safe</h5>
+                            <p class="card-text text-muted">
+                                Bank-level security with SSL encryption and secure payment processing via Stripe.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card h-100 text-center border-0 shadow-sm">
+                        <div class="card-body">
+                            <i class="fas fa-truck fa-3x text-primary mb-3"></i>
+                            <h5 class="card-title">Fast Delivery</h5>
+                            <p class="card-text text-muted">
+                                Quick and reliable shipping to your doorstep with real-time tracking.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card h-100 text-center border-0 shadow-sm">
+                        <div class="card-body">
+                            <i class="fas fa-headset fa-3x text-info mb-3"></i>
+                            <h5 class="card-title">24/7 Support</h5>
+                            <p class="card-text text-muted">
+                                Our dedicated customer support team is always ready to help you.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-body">
+                    <h4 class="card-title">
+                        <i class="fas fa-bullseye text-danger"></i> Our Mission
+                    </h4>
+                    <p>
+                        To revolutionize online shopping by combining cutting-edge technology with exceptional customer service. We strive to make e-commerce accessible, secure, and enjoyable for everyone.
+                    </p>
+                </div>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h4 class="card-title">
+                        <i class="fas fa-code text-warning"></i> Technology Stack
+                    </h4>
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <ul class="list-unstyled">
+                                <li><i class="fas fa-check text-success"></i> ASP.NET Core 8</li>
+                                <li><i class="fas fa-check text-success"></i> Entity Framework Core</li>
+                                <li><i class="fas fa-check text-success"></i> PostgreSQL Database</li>
+                                <li><i class="fas fa-check text-success"></i> Redis Caching</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <ul class="list-unstyled">
+                                <li><i class="fas fa-check text-success"></i> JWT Authentication</li>
+                                <li><i class="fas fa-check text-success"></i> Stripe Payments</li>
+                                <li><i class="fas fa-check text-success"></i> Clean Architecture</li>
+                                <li><i class="fas fa-check text-success"></i> RESTful API</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-center mt-5">
+                <a href="/products" class="btn btn-primary btn-lg px-5">
+                    <i class="fas fa-shopping-bag"></i> Start Shopping
+                </a>
+                <a href="/contact" class="btn btn-outline-secondary btn-lg px-5 ms-3">
+                    <i class="fas fa-envelope"></i> Contact Us
+                </a>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,145 @@
+@page
+@model LoginModel
+@{
+    ViewData["Title"] = "Login";
+}
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-5">
+            <div class="card shadow-lg border-0">
+                <div class="card-body p-5">
+                    <div class="text-center mb-4">
+                        <i class="fas fa-user-circle fa-4x text-primary mb-3"></i>
+                        <h2 class="fw-bold">Welcome Back</h2>
+                        <p class="text-muted">Sign in to your account</p>
+                    </div>
+
+                    @if (Model.ErrorMessage != null)
+                    {
+                        <div class="alert alert-danger" role="alert">
+                            <i class="fas fa-exclamation-circle"></i> @Model.ErrorMessage
+                        </div>
+                    }
+
+                    @if (Model.SuccessMessage != null)
+                    {
+                        <div class="alert alert-success" role="alert">
+                            <i class="fas fa-check-circle"></i> @Model.SuccessMessage
+                        </div>
+                    }
+
+                    <!-- Google Sign In -->
+                    <div class="d-grid mb-3">
+                        <button type="button" class="btn btn-outline-danger btn-lg" onclick="signInWithGoogle()">
+                            <i class="fab fa-google me-2"></i> Sign in with Google
+                        </button>
+                    </div>
+
+                    <div class="text-center my-3">
+                        <span class="text-muted">OR</span>
+                    </div>
+
+                    <!-- Email Login Form -->
+                    <form method="post">
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email Address</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-envelope"></i></span>
+                                <input type="email" class="form-control form-control-lg" id="email" 
+                                       name="Email" asp-for="Email" placeholder="your@email.com" required>
+                            </div>
+                            <span asp-validation-for="Email" class="text-danger"></span>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Password</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-lock"></i></span>
+                                <input type="password" class="form-control form-control-lg" id="password" 
+                                       name="Password" asp-for="Password" placeholder="Enter your password" required>
+                            </div>
+                            <span asp-validation-for="Password" class="text-danger"></span>
+                        </div>
+
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="rememberMe" name="RememberMe" asp-for="RememberMe">
+                            <label class="form-check-label" for="rememberMe">
+                                Remember me
+                            </label>
+                        </div>
+
+                        <div class="d-grid mb-3">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-sign-in-alt"></i> Sign In
+                            </button>
+                        </div>
+
+                        <div class="text-center">
+                            <a href="/account/forgot-password" class="text-decoration-none">Forgot password?</a>
+                        </div>
+                    </form>
+
+                    <hr class="my-4">
+
+                    <div class="text-center">
+                        <p class="mb-0">Don't have an account? 
+                            <a href="/account/register" class="text-decoration-none fw-bold">Sign up now</a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-center mt-4">
+                <a href="/" class="text-decoration-none">
+                    <i class="fas fa-arrow-left"></i> Back to Home
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <script>
+        function signInWithGoogle() {
+            // Redirect to Google OAuth endpoint
+            window.location.href = '/api/auth/google-signin';
+        }
+
+        // Handle Google Sign-In callback
+        function handleCredentialResponse(response) {
+            // Send the Google ID token to your backend
+            fetch('/api/auth/google-signin', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ idToken: response.credential })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.token) {
+                    localStorage.setItem('authToken', data.token);
+                    localStorage.setItem('user', JSON.stringify(data.user));
+                    window.location.href = '/';
+                } else {
+                    alert('Google sign-in failed. Please try again.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred during Google sign-in.');
+            });
+        }
+
+        // Initialize Google Sign-In button (if using Google Identity Services)
+        window.onload = function() {
+            // This would be configured with your Google Client ID
+            // google.accounts.id.initialize({
+            //     client_id: 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com',
+            //     callback: handleCredentialResponse
+            // });
+        };
+    </script>
+}
