@@ -1,0 +1,135 @@
+@page
+@model ProductsModel
+@{
+    ViewData["Title"] = "Products";
+}
+
+<div class="container py-5">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="fw-bold">Our Products</h1>
+            <p class="text-muted">Browse our complete collection</p>
+        </div>
+    </div>
+    
+    <!-- Filter Section -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Filters</h5>
+                    <form method="get">
+                        <div class="mb-3">
+                            <label class="form-label">Category</label>
+                            <select name="category" class="form-select" onchange="this.form.submit()">
+                                <option value="">All Categories</option>
+                                <option value="Electronics" selected="@(Model.SelectedCategory == "Electronics")">Electronics</option>
+                                <option value="Clothing" selected="@(Model.SelectedCategory == "Clothing")">Clothing</option>
+                                <option value="Books" selected="@(Model.SelectedCategory == "Books")">Books</option>
+                                <option value="Home" selected="@(Model.SelectedCategory == "Home")">Home & Garden</option>
+                                <option value="Sports" selected="@(Model.SelectedCategory == "Sports")">Sports</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-9">
+            @if (Model.Products != null && Model.Products.Any())
+            {
+                <div class="row g-4">
+                    @foreach (var product in Model.Products)
+                    {
+                        <div class="col-md-6 col-lg-4">
+                            <div class="product-card">
+                                <div class="product-image">
+                                    <i class="fas fa-box"></i>
+                                </div>
+                                <div class="product-info">
+                                    <span class="category-badge">@product.Category</span>
+                                    <h5 class="mt-2 mb-1">@product.Name</h5>
+                                    <p class="text-muted small mb-2">@product.Description</p>
+                                    <div class="product-price">$@product.Price.ToString("F2")</div>
+                                    
+                                    @if (product.StockQuantity > 0)
+                                    {
+                                        <span class="stock-badge in-stock">
+                                            <i class="fas fa-check-circle"></i> @product.StockQuantity in stock
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="stock-badge out-of-stock">
+                                            <i class="fas fa-times-circle"></i> Out of Stock
+                                        </span>
+                                    }
+                                    
+                                    <div class="mt-3 d-grid">
+                                        @if (product.StockQuantity > 0)
+                                        {
+                                            <button class="btn btn-primary" onclick="addToCart('@product.Id', '@product.Name', @product.Price)">
+                                                <i class="fas fa-cart-plus"></i> Add to Cart
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <button class="btn btn-secondary" disabled>
+                                                <i class="fas fa-ban"></i> Unavailable
+                                            </button>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+                
+                <!-- Pagination -->
+                @if (Model.TotalPages > 1)
+                {
+                    <nav class="mt-4">
+                        <ul class="pagination justify-content-center">
+                            @for (int i = 1; i <= Model.TotalPages; i++)
+                            {
+                                <li class="page-item @(i == Model.CurrentPage ? "active" : "")">
+                                    <a class="page-link" href="/products?page=@i@(string.IsNullOrEmpty(Model.SelectedCategory) ? "" : $"&category={Model.SelectedCategory}")">@i</a>
+                                </li>
+                            }
+                        </ul>
+                    </nav>
+                }
+            }
+            else
+            {
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> No products found. Try selecting a different category.
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function addToCart(productId, productName, price) {
+            let cart = JSON.parse(localStorage.getItem('cart') || '[]');
+            const existingItem = cart.find(item => item.id === productId);
+            if (existingItem) {
+                existingItem.quantity += 1;
+            } else {
+                cart.push({ id: productId, name: productName, price: price, quantity: 1 });
+            }
+            localStorage.setItem('cart', JSON.stringify(cart));
+            updateCartBadge();
+            
+            // Show toast notification
+            const toast = document.createElement('div');
+            toast.className = 'alert alert-success position-fixed top-0 end-0 m-3';
+            toast.style.zIndex = '9999';
+            toast.innerHTML = `<i class="fas fa-check-circle"></i> ${productName} added to cart!`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+    </script>
+}

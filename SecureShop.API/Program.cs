@@ -42,6 +42,9 @@ catch (Exception ex)
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
+// ── HttpClient for Razor Pages to call API ───────────────────────────────────
+builder.Services.AddHttpClient();
+
 // ── Health checks ─────────────────────────────────────────────────────────────
 builder.Services.AddHealthChecks();
 
@@ -106,8 +109,8 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new OpenApiInfo
     {
         Title       = "SecureShop API",
-        Version     = "v1",
-        Description = "Production-ready e-commerce REST API"
+        Version     = "1.0.0",
+        Description = "Production-ready e-commerce REST API with JWT authentication"
     });
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -115,7 +118,9 @@ builder.Services.AddSwaggerGen(c =>
         Type         = SecuritySchemeType.Http,
         Scheme       = "bearer",
         BearerFormat = "JWT",
-        Description  = "Enter your JWT token"
+        Description  = "Enter JWT token (without 'Bearer' prefix)",
+        In           = ParameterLocation.Header,
+        Name         = "Authorization"
     });
 
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
@@ -133,6 +138,9 @@ builder.Services.AddSwaggerGen(c =>
         }
     });
 });
+
+// ── Razor Pages for Frontend ─────────────────────────────────────────────────
+builder.Services.AddRazorPages();
 
 // ── Port (Railway injects PORT env var) ──────────────────────────────────────
 // Use TryParse — int.Parse throws FormatException if PORT has whitespace or
@@ -185,7 +193,11 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 // ── Endpoints ─────────────────────────────────────────────────────────────────
+// Map API controllers under /api prefix
 app.MapControllers();
+
+// Map Razor Pages for frontend website
+app.MapRazorPages();
 
 // Health check — available in all environments for Railway
 app.MapHealthChecks("/health", new HealthCheckOptions
@@ -198,12 +210,11 @@ app.MapHealthChecks("/health", new HealthCheckOptions
     }
 });
 
-// Root endpoint - Redirect to Swagger documentation
-app.MapGet("/", () => Results.Redirect("/swagger"));
-app.MapGet("/docs", () => Results.Redirect("/swagger"));
+// Swagger available at /api/swagger for developers
+app.MapGet("/api/swagger", () => Results.Redirect("/swagger"));
 
 // API status endpoint (for monitoring/health checks)
-app.MapGet("/api", () =>
+app.MapGet("/api/status", () =>
 {
     var response = new
     {
@@ -215,7 +226,9 @@ app.MapGet("/api", () =>
         { 
             swagger = "/swagger",
             health = "/health",
-            docs = "/docs"
+            website = "/",
+            products = "/products",
+            cart = "/cart"
         }
     };
     return Results.Json(response);
