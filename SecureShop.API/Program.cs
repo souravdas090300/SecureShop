@@ -206,14 +206,19 @@ if (app.Environment.IsDevelopment())
 }
 else
 {
-    app.MapGet("/", () => Results.Ok(new
+    app.MapGet("/", (HttpContext context) =>
     {
-        service   = "SecureShop API",
-        version   = "1.0.0",
-        status    = "running",
-        timestamp = DateTime.UtcNow,
-        endpoints = new { health = "/health" }
-    }));
+        context.Response.ContentType = "application/json; charset=utf-8";
+        var response = new
+        {
+            service   = "SecureShop API",
+            version   = "1.0.0",
+            status    = "running",
+            timestamp = DateTime.UtcNow,
+            endpoints = new { health = "/health" }
+        };
+        return Results.Json(response);
+    });
 }
 
 // ── Database migration & seeding (background — runs AFTER Kestrel starts) ────
