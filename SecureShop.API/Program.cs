@@ -11,6 +11,7 @@ using Microsoft.OpenApi.Models;
 using Serilog;
 using SecureShop.API.Middleware;
 using SecureShop.Application;
+using SecureShop.Domain.Entities;
 using SecureShop.Infrastructure;
 
 // ── Early crash handler — visible in Railway deploy logs before Serilog starts ──
@@ -263,6 +264,38 @@ _ = Task.Run(async () =>
         }
 
         Log.Information("Startup init: role seeding completed");
+
+        // Seed default admin user if none exists
+        var userManager = scope.ServiceProvider
+            .GetRequiredService<UserManager<ApplicationUser>>();
+        
+        var adminEmail = "admin@secureshop.com";
+        var adminUser = await userManager.FindByEmailAsync(adminEmail);
+        
+        if (adminUser == null)
+        {
+            adminUser = new ApplicationUser
+            {
+                UserName = adminEmail,
+                Email = adminEmail,
+                FirstName = "Admin",
+                LastName = "User",
+                EmailConfirmed = true
+            };
+            
+            var result = await userManager.CreateAsync(adminUser, "Admin123!@#");
+            
+            if (result.Succeeded)
+            {
+                await userManager.AddToRoleAsync(adminUser, "Admin");
+                Log.Information("Startup init: created default admin user (admin@secureshop.com / Admin123!@#)");
+            }
+            else
+            {
+                Log.Warning("Startup init: failed to create admin user: {Errors}", 
+                    string.Join(", ", result.Errors.Select(e => e.Description)));
+            }
+        }
     }
     catch (Exception ex)
     {

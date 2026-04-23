@@ -20,4 +20,8 @@ public class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponseDto>> Login([FromBody] LoginDto dto)
         => Ok(await _authService.LoginAsync(dto));
+
+    [HttpPost("google-signin")]
+    public async Task<ActionResult<AuthResponseDto>> GoogleSignIn([FromBody] GoogleSignInDto dto)
+        => Ok(await _authService.GoogleSignInAsync(dto));
 }

@@ -5,6 +5,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Google.Apis.Auth" Version="1.68.0" />
     <PackageReference Include="StackExchange.Redis" Version="2.12.4" />
     <PackageReference Include="Stripe.net" Version="50.4.1" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.11" />

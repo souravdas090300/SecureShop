@@ -1,0 +1,378 @@
+@page
+@model AdminOrdersModel
+@{
+    ViewData["Title"] = "Manage Orders";
+}
+
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="fw-bold mb-1">
+                <i class="fas fa-shopping-cart"></i> Order Management
+            </h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="/admin">Dashboard</a></li>
+                    <li class="breadcrumb-item active">Orders</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <input type="text" class="form-control" id="searchInput" placeholder="Search by order ID or customer email...">
+                </div>
+                <div class="col-md-3">
+                    <select class="form-select" id="statusFilter">
+                        <option value="">All Status</option>
+                        <option value="0">Pending</option>
+                        <option value="1">Processing</option>
+                        <option value="2">Shipped</option>
+                        <option value="3">Completed</option>
+                        <option value="4">Cancelled</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <input type="date" class="form-control" id="dateFilter">
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-outline-secondary w-100" onclick="clearFilters()">
+                        <i class="fas fa-redo"></i> Reset
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Orders Table -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle" id="ordersTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Order ID</th>
+                            <th>Customer</th>
+                            <th>Date</th>
+                            <th>Items</th>
+                            <th>Total</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="7" class="text-center py-4">
+                                <i class="fas fa-spinner fa-spin fa-2x text-muted"></i>
+                                <p class="text-muted mt-2">Loading orders...</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Order Details Modal -->
+<div class="modal fade" id="orderDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-receipt"></i> Order Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="orderDetailsContent">
+                <div class="text-center py-4">
+                    <i class="fas fa-spinner fa-spin fa-2x"></i>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const apiBaseUrl = '@Model.ApiBaseUrl';
+        let allOrders = [];
+
+        async function loadOrders() {
+            try {
+                const response = await fetch(`${apiBaseUrl}/api/orders`, {
+                    headers: {
+                        'Authorization': `Bearer ${getCookie('AuthToken')}`
+                    }
+                });
+
+                if (response.ok) {
+                    allOrders = await response.json();
+                    renderOrders(allOrders);
+                } else if (response.status === 401) {
+                    showError('Please log in as an admin to view orders');
+                } else {
+                    showError('Failed to load orders');
+                }
+            } catch (error) {
+                console.error('Error loading orders:', error);
+                showError('Unable to connect to the server');
+            }
+        }
+
+        function renderOrders(orders) {
+            const tbody = document.querySelector('#ordersTable tbody');
+            
+            if (orders.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-muted">
+                            <i class="fas fa-inbox fa-3x mb-3 d-block"></i>
+                            No orders found
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = orders.map(order => {
+                const statusBadge = getStatusBadge(order.status);
+                const date = new Date(order.orderDate).toLocaleString();
+                const itemCount = order.items ? order.items.length : 0;
+
+                return `
+                    <tr>
+                        <td><strong>#${order.id.substring(0, 8).toUpperCase()}</strong></td>
+                        <td>${escapeHtml(order.customerEmail || 'N/A')}</td>
+                        <td>${date}</td>
+                        <td>${itemCount} item(s)</td>
+                        <td><strong>$${order.totalAmount.toFixed(2)}</strong></td>
+                        <td>${statusBadge}</td>
+                        <td>
+                            <div class="btn-group" role="group">
+                                <button class="btn btn-sm btn-outline-primary" onclick="viewOrderDetails('${order.id}')" title="View Details">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-success" onclick="updateOrderStatus('${order.id}', ${getNextStatus(order.status)})" title="Update Status">
+                                    <i class="fas fa-arrow-right"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function getStatusBadge(status) {
+            const statusMap = {
+                0: { label: 'Pending', class: 'warning' },
+                1: { label: 'Processing', class: 'info' },
+                2: { label: 'Shipped', class: 'primary' },
+                3: { label: 'Completed', class: 'success' },
+                4: { label: 'Cancelled', class: 'danger' }
+            };
+            
+            const statusInfo = statusMap[status] || { label: 'Unknown', class: 'secondary' };
+            return `<span class="badge bg-${statusInfo.class}">${statusInfo.label}</span>`;
+        }
+
+        function getNextStatus(currentStatus) {
+            // Pending -> Processing -> Shipped -> Completed
+            if (currentStatus === 0) return 1; // Pending -> Processing
+            if (currentStatus === 1) return 2; // Processing -> Shipped
+            if (currentStatus === 2) return 3; // Shipped -> Completed
+            return currentStatus; // Already completed or cancelled
+        }
+
+        async function viewOrderDetails(orderId) {
+            const modal = new bootstrap.Modal(document.getElementById('orderDetailsModal'));
+            const content = document.getElementById('orderDetailsContent');
+            
+            content.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
+            modal.show();
+
+            try {
+                const response = await fetch(`${apiBaseUrl}/api/orders/${orderId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${getCookie('AuthToken')}`
+                    }
+                });
+
+                if (response.ok) {
+                    const order = await response.json();
+                    renderOrderDetails(order);
+                } else {
+                    content.innerHTML = '<div class="alert alert-danger">Failed to load order details</div>';
+                }
+            } catch (error) {
+                console.error('Error loading order details:', error);
+                content.innerHTML = '<div class="alert alert-danger">Unable to load order details</div>';
+            }
+        }
+
+        function renderOrderDetails(order) {
+            const content = document.getElementById('orderDetailsContent');
+            const statusBadge = getStatusBadge(order.status);
+            const date = new Date(order.orderDate).toLocaleString();
+
+            let itemsHtml = '';
+            if (order.items && order.items.length > 0) {
+                itemsHtml = order.items.map(item => `
+                    <tr>
+                        <td>${escapeHtml(item.productName || 'N/A')}</td>
+                        <td class="text-center">${item.quantity}</td>
+                        <td class="text-end">$${item.price.toFixed(2)}</td>
+                        <td class="text-end"><strong>$${(item.quantity * item.price).toFixed(2)}</strong></td>
+                    </tr>
+                `).join('');
+            } else {
+                itemsHtml = '<tr><td colspan="4" class="text-center text-muted">No items</td></tr>';
+            }
+
+            content.innerHTML = `
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <p><strong>Order ID:</strong> #${order.id.substring(0, 8).toUpperCase()}</p>
+                        <p><strong>Customer:</strong> ${escapeHtml(order.customerEmail || 'N/A')}</p>
+                        <p><strong>Date:</strong> ${date}</p>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <p><strong>Status:</strong> ${statusBadge}</p>
+                        <p><strong>Total Amount:</strong> <span class="h4 text-success">$${order.totalAmount.toFixed(2)}</span></p>
+                    </div>
+                </div>
+                <hr>
+                <h6 class="mb-3">Order Items</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th class="text-center">Quantity</th>
+                                <th class="text-end">Price</th>
+                                <th class="text-end">Subtotal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${itemsHtml}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        async function updateOrderStatus(orderId, newStatus) {
+            if (newStatus < 0 || newStatus > 4) {
+                alert('Cannot update status further');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${apiBaseUrl}/api/orders/${orderId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${getCookie('AuthToken')}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ status: newStatus })
+                });
+
+                if (response.ok) {
+                    showSuccess('Order status updated successfully');
+                    await loadOrders();
+                } else {
+                    alert('Failed to update order status');
+                }
+            } catch (error) {
+                console.error('Error updating order:', error);
+                alert('Unable to update order status');
+            }
+        }
+
+        function applyFilters() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const status = document.getElementById('statusFilter').value;
+            const dateFilter = document.getElementById('dateFilter').value;
+
+            let filtered = allOrders;
+
+            if (searchTerm) {
+                filtered = filtered.filter(o => 
+                    o.id.toLowerCase().includes(searchTerm) || 
+                    (o.customerEmail && o.customerEmail.toLowerCase().includes(searchTerm))
+                );
+            }
+
+            if (status) {
+                filtered = filtered.filter(o => o.status === parseInt(status));
+            }
+
+            if (dateFilter) {
+                const filterDate = new Date(dateFilter).toDateString();
+                filtered = filtered.filter(o => 
+                    new Date(o.orderDate).toDateString() === filterDate
+                );
+            }
+
+            renderOrders(filtered);
+        }
+
+        function clearFilters() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('statusFilter').value = '';
+            document.getElementById('dateFilter').value = '';
+            renderOrders(allOrders);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+            return null;
+        }
+
+        function showError(message) {
+            const tbody = document.querySelector('#ordersTable tbody');
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="7" class="text-center py-4 text-danger">
+                        <i class="fas fa-exclamation-circle fa-2x mb-2 d-block"></i>
+                        ${message}
+                    </td>
+                </tr>
+            `;
+        }
+
+        function showSuccess(message) {
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-success alert-dismissible fade show';
+            alert.innerHTML = `
+                <i class="fas fa-check-circle"></i> ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.querySelector('.container-fluid').insertBefore(alert, document.querySelector('.card'));
+            setTimeout(() => alert.remove(), 3000);
+        }
+
+        // Event listeners
+        document.getElementById('searchInput').addEventListener('input', applyFilters);
+        document.getElementById('statusFilter').addEventListener('change', applyFilters);
+        document.getElementById('dateFilter').addEventListener('change', applyFilters);
+
+        // Load orders on page load
+        document.addEventListener('DOMContentLoaded', loadOrders);
+    </script>
+}

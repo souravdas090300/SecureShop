@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using Google.Apis.Auth;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
@@ -14,11 +15,16 @@ namespace SecureShop.Infrastructure.Services;
 public class AuthService : IAuthService
 {
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly RoleManager<IdentityRole> _roleManager;
     private readonly IConfiguration _config;
 
-    public AuthService(UserManager<ApplicationUser> userManager, IConfiguration config)
+    public AuthService(
+        UserManager<ApplicationUser> userManager, 
+        RoleManager<IdentityRole> roleManager,
+        IConfiguration config)
     {
         _userManager = userManager;
+        _roleManager = roleManager;
         _config = config;
     }
 
@@ -37,6 +43,12 @@ public class AuthService : IAuthService
         if (!result.Succeeded)
             throw new DomainException(string.Join(", ", result.Errors.Select(e => e.Description)));
 
+        // Ensure Customer role exists before adding user to it
+        if (!await _roleManager.RoleExistsAsync("Customer"))
+        {
+            await _roleManager.CreateAsync(new IdentityRole("Customer"));
+        }
+        
         await _userManager.AddToRoleAsync(user, "Customer");
         return await GenerateTokenAsync(user);
     }
@@ -50,6 +62,54 @@ public class AuthService : IAuthService
             throw new DomainException("Invalid credentials");
 
         return await GenerateTokenAsync(user);
+    }
+
+    public async Task<AuthResponseDto> GoogleSignInAsync(GoogleSignInDto dto)
+    {
+        try
+        {
+            // Validate the Google ID token
+            var settings = new GoogleJsonWebSignature.ValidationSettings()
+            {
+                Audience = new[] { _config["GoogleAuth:ClientId"]! }
+            };
+
+            var payload = await GoogleJsonWebSignature.ValidateAsync(dto.IdToken, settings);
+
+            // Check if user exists
+            var user = await _userManager.FindByEmailAsync(payload.Email);
+
+            if (user == null)
+            {
+                // Create new user from Google account
+                user = new ApplicationUser
+                {
+                    UserName = payload.Email,
+                    Email = payload.Email,
+                    FirstName = payload.GivenName ?? "User",
+                    LastName = payload.FamilyName ?? "",
+                    EmailConfirmed = true // Google emails are already verified
+                };
+
+                var result = await _userManager.CreateAsync(user);
+                if (!result.Succeeded)
+                    throw new DomainException(string.Join(", ", result.Errors.Select(e => e.Description)));
+
+                // Ensure Customer role exists before adding user to it
+                if (!await _roleManager.RoleExistsAsync("Customer"))
+                {
+                    await _roleManager.CreateAsync(new IdentityRole("Customer"));
+                }
+
+                await _userManager.AddToRoleAsync(user, "Customer");
+            }
+
+            return await GenerateTokenAsync(user);
+        }
+        catch (InvalidJwtException)
+        {
+            throw new DomainException("Invalid Google token");
+        }
     }
 
     private async Task<AuthResponseDto> GenerateTokenAsync(ApplicationUser user)

@@ -120,9 +120,57 @@
 @section Scripts {
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script>
+        let googleClientId = '@Model.GoogleClientId';
+
+        // Initialize Google Sign-Up
+        window.onload = function() {
+            // Initialize Google Identity Services
+            if (typeof google !== 'undefined') {
+                google.accounts.id.initialize({
+                    client_id: googleClientId,
+                    callback: handleCredentialResponse
+                });
+            }
+        };
+
         function signUpWithGoogle() {
-            // Redirect to Google OAuth registration endpoint
-            window.location.href = '/api/auth/google-signin';
+            // Trigger Google One Tap or the button flow
+            if (typeof google !== 'undefined') {
+                google.accounts.id.prompt(); // Show One Tap dialog
+            } else {
+                alert('Google Sign-In is not loaded yet. Please try again.');
+            }
+        }
+
+        // Handle Google Sign-Up callback
+        async function handleCredentialResponse(response) {
+            try {
+                // Send the Google ID token to your backend
+                const result = await fetch('/api/auth/google-signin', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ idToken: response.credential })
+                });
+
+                const data = await result.json();
+
+                if (result.ok && data.token) {
+                    // Store authentication data
+                    document.cookie = `AuthToken=${data.token}; path=/; max-age=28800`; // 8 hours
+                    document.cookie = `UserEmail=${data.email}; path=/; max-age=28800`;
+                    document.cookie = `UserName=${data.name}; path=/; max-age=28800`;
+                    
+                    // Redirect to home page
+                    window.location.href = '/';
+                } else {
+                    alert(data.message || 'Google sign-up failed. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('An error occurred during Google sign-up. Please try again.');
+            }
         }
 
         // Password strength indicator

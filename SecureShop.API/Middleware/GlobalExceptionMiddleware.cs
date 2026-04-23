@@ -23,7 +23,8 @@ public class GlobalExceptionMiddleware
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled exception: {Message}", ex.Message);
+            _logger.LogError(ex, "Unhandled exception at {Path}: {Message} | StackTrace: {StackTrace}", 
+                context.Request.Path, ex.Message, ex.StackTrace);
             await HandleExceptionAsync(context, ex);
         }
     }

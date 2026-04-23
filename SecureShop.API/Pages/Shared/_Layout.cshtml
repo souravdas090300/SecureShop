@@ -4,19 +4,23 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - SecureShop</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
-            --primary-color: #2563eb;
+            --primary-color: #153D41;
+            --primary-hover: #0C3438;
+            --accent-color: #237958;
             --secondary-color: #64748b;
             --success-color: #10b981;
             --danger-color: #ef4444;
+            --light-bg: #F3F6F6;
         }
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #f8fafc;
+            background: var(--light-bg);
         }
         
         .navbar {
@@ -29,6 +33,14 @@
             font-size: 1.5rem;
             font-weight: bold;
             color: var(--primary-color) !important;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .navbar-brand img {
+            height: 40px;
+            width: auto;
         }
         
         .nav-link {
@@ -64,7 +76,7 @@
         }
         
         .hero-section {
-            background: linear-gradient(135deg, var(--primary-color), #1d4ed8);
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
             color: white;
             padding: 4rem 0;
             margin-bottom: 3rem;
@@ -115,7 +127,7 @@
         }
         
         .btn-primary:hover {
-            background: #1d4ed8;
+            background: var(--primary-hover);
         }
         
         .btn-success {
@@ -168,7 +180,8 @@
     <nav class="navbar navbar-expand-lg navbar-light">
         <div class="container">
             <a class="navbar-brand" href="/">
-                <i class="fas fa-shopping-bag"></i> SecureShop
+                <img src="/secureshop-logo.svg" alt="SecureShop Logo">
+                <span>SecureShop</span>
             </a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
@@ -201,6 +214,8 @@
                             <ul class="dropdown-menu dropdown-menu-end">
                                 <li><a class="dropdown-item" href="/account/profile"><i class="fas fa-user"></i> My Profile</a></li>
                                 <li><a class="dropdown-item" href="/account/orders"><i class="fas fa-box"></i> My Orders</a></li>
+                                <li id="adminLinkNav" style="display: none;"><hr class="dropdown-divider"></li>
+                                <li id="adminLinkItem" style="display: none;"><a class="dropdown-item text-primary fw-bold" href="/admin"><i class="fas fa-shield-alt"></i> Admin Dashboard</a></li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="#" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
                             </ul>
@@ -226,7 +241,10 @@
         <div class="container">
             <div class="row">
                 <div class="col-md-4">
-                    <h5><i class="fas fa-shopping-bag"></i> SecureShop</h5>
+                    <div class="d-flex align-items-center gap-2 mb-3">
+                        <img src="/secureshop-logo.svg" alt="SecureShop Logo" style="height: 30px; width: auto;">
+                        <h5 class="mb-0">SecureShop</h5>
+                    </div>
                     <p class="text-muted">Your trusted e-commerce platform for quality products.</p>
                 </div>
                 <div class="col-md-4">
@@ -273,10 +291,43 @@
                 document.getElementById('userAccountNav').style.display = 'block';
                 document.getElementById('loginNav').style.display = 'none';
                 document.getElementById('userNameDisplay').textContent = userName;
+                
+                // Check if user is admin by decoding JWT token
+                try {
+                    const tokenPayload = parseJwt(authToken);
+                    const roles = tokenPayload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'];
+                    
+                    // roles can be a string (single role) or array (multiple roles)
+                    const isAdmin = Array.isArray(roles) 
+                        ? roles.includes('Admin') 
+                        : roles === 'Admin';
+                    
+                    if (isAdmin) {
+                        document.getElementById('adminLinkNav').style.display = 'block';
+                        document.getElementById('adminLinkItem').style.display = 'block';
+                    }
+                } catch (error) {
+                    console.log('Could not parse token for role check');
+                }
             } else {
                 // User is not logged in
                 document.getElementById('userAccountNav').style.display = 'none';
                 document.getElementById('loginNav').style.display = 'block';
+            }
+        }
+        
+        // Parse JWT token
+        function parseJwt(token) {
+            try {
+                const base64Url = token.split('.')[1];
+                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+                const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                }).join(''));
+                return JSON.parse(jsonPayload);
+            } catch (error) {
+                console.error('Error parsing JWT:', error);
+                return {};
             }
         }
         

@@ -41,6 +41,7 @@ public class RegisterModel : PageModel
     public string ConfirmPassword { get; set; } = string.Empty;
 
     public string? ErrorMessage { get; set; }
+    public string GoogleClientId => _configuration["GoogleAuth:ClientId"] ?? "";
 
     public RegisterModel(IHttpClientFactory httpClientFactory, IConfiguration configuration)
     {

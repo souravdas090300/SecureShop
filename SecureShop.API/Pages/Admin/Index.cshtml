@@ -1,0 +1,259 @@
+@page
+@model AdminIndexModel
+@{
+    ViewData["Title"] = "Admin Dashboard";
+}
+
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="fw-bold mb-1">
+                <i class="fas fa-tachometer-alt"></i> Admin Dashboard
+            </h2>
+            <p class="text-muted">Welcome back, @Model.AdminName</p>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-2">Total Products</h6>
+                            <h3 class="mb-0" id="totalProducts">--</h3>
+                        </div>
+                        <div class="bg-primary bg-opacity-10 p-3 rounded">
+                            <i class="fas fa-box fa-2x text-primary"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-2">Total Orders</h6>
+                            <h3 class="mb-0" id="totalOrders">--</h3>
+                        </div>
+                        <div class="bg-success bg-opacity-10 p-3 rounded">
+                            <i class="fas fa-shopping-cart fa-2x text-success"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-2">Pending Orders</h6>
+                            <h3 class="mb-0" id="pendingOrders">--</h3>
+                        </div>
+                        <div class="bg-warning bg-opacity-10 p-3 rounded">
+                            <i class="fas fa-clock fa-2x text-warning"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-2">Total Revenue</h6>
+                            <h3 class="mb-0" id="totalRevenue">--</h3>
+                        </div>
+                        <div class="bg-info bg-opacity-10 p-3 rounded">
+                            <i class="fas fa-dollar-sign fa-2x text-info"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title mb-3">
+                        <i class="fas fa-bolt"></i> Quick Actions
+                    </h5>
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <a href="/admin/products/create" class="btn btn-primary w-100">
+                                <i class="fas fa-plus"></i> Add New Product
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="/admin/products" class="btn btn-outline-primary w-100">
+                                <i class="fas fa-boxes"></i> Manage Products
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="/admin/orders" class="btn btn-outline-success w-100">
+                                <i class="fas fa-list"></i> View All Orders
+                            </a>
+                        </div>
+                        <div class="col-md-3">
+                            <a href="/swagger" class="btn btn-outline-secondary w-100" target="_blank">
+                                <i class="fas fa-code"></i> API Documentation
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Orders Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-receipt"></i> Recent Orders
+                        </h5>
+                        <a href="/admin/orders" class="btn btn-sm btn-outline-primary">View All</a>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="recentOrdersTable">
+                            <thead>
+                                <tr>
+                                    <th>Order ID</th>
+                                    <th>Customer</th>
+                                    <th>Date</th>
+                                    <th>Total</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-4">
+                                        <i class="fas fa-spinner fa-spin"></i> Loading orders...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const apiBaseUrl = '@Model.ApiBaseUrl';
+        
+        // Load dashboard statistics
+        async function loadDashboardStats() {
+            try {
+                // Load products count
+                const productsResponse = await fetch(`${apiBaseUrl}/api/products`);
+                if (productsResponse.ok) {
+                    const products = await productsResponse.json();
+                    document.getElementById('totalProducts').textContent = products.length;
+                }
+
+                // Load orders count
+                const ordersResponse = await fetch(`${apiBaseUrl}/api/orders`, {
+                    headers: {
+                        'Authorization': `Bearer ${getCookie('AuthToken')}`
+                    }
+                });
+                if (ordersResponse.ok) {
+                    const orders = await ordersResponse.json();
+                    document.getElementById('totalOrders').textContent = orders.length;
+                    
+                    // Calculate pending orders
+                    const pending = orders.filter(o => o.status === 'Pending' || o.status === 0).length;
+                    document.getElementById('pendingOrders').textContent = pending;
+                    
+                    // Calculate total revenue
+                    const revenue = orders
+                        .filter(o => o.status === 'Completed' || o.status === 3)
+                        .reduce((sum, o) => sum + o.totalAmount, 0);
+                    document.getElementById('totalRevenue').textContent = '$' + revenue.toFixed(2);
+                    
+                    // Load recent orders (last 5)
+                    loadRecentOrders(orders.slice(0, 5));
+                }
+            } catch (error) {
+                console.error('Error loading dashboard stats:', error);
+            }
+        }
+
+        function loadRecentOrders(orders) {
+            const tbody = document.querySelector('#recentOrdersTable tbody');
+            
+            if (orders.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">
+                            No orders yet
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = orders.map(order => {
+                const statusBadge = getStatusBadge(order.status);
+                const date = new Date(order.orderDate).toLocaleDateString();
+                
+                return `
+                    <tr>
+                        <td><strong>#${order.id.substring(0, 8)}</strong></td>
+                        <td>${order.customerEmail || 'N/A'}</td>
+                        <td>${date}</td>
+                        <td><strong>$${order.totalAmount.toFixed(2)}</strong></td>
+                        <td>${statusBadge}</td>
+                        <td>
+                            <a href="/admin/orders/${order.id}" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-eye"></i> View
+                            </a>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function getStatusBadge(status) {
+            const statusMap = {
+                0: { label: 'Pending', class: 'warning' },
+                1: { label: 'Processing', class: 'info' },
+                2: { label: 'Shipped', class: 'primary' },
+                3: { label: 'Completed', class: 'success' },
+                4: { label: 'Cancelled', class: 'danger' },
+                'Pending': { label: 'Pending', class: 'warning' },
+                'Processing': { label: 'Processing', class: 'info' },
+                'Shipped': { label: 'Shipped', class: 'primary' },
+                'Completed': { label: 'Completed', class: 'success' },
+                'Cancelled': { label: 'Cancelled', class: 'danger' }
+            };
+            
+            const statusInfo = statusMap[status] || { label: 'Unknown', class: 'secondary' };
+            return `<span class="badge bg-${statusInfo.class}">${statusInfo.label}</span>`;
+        }
+
+        function getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+            return null;
+        }
+
+        // Load stats on page load
+        document.addEventListener('DOMContentLoaded', loadDashboardStats);
+    </script>
+}
