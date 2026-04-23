@@ -22,7 +22,10 @@
                         </div>
                     }
 
-                    <div asp-validation-summary="All" class="alert alert-danger" role="alert"></div>
+                    @if (ViewData.ModelState.ErrorCount > 0)
+                    {
+                        <div asp-validation-summary="All" class="alert alert-danger" role="alert"></div>
+                    }
 
                     <!-- Google Sign Up -->
                     <div class="d-grid mb-3">
@@ -126,18 +129,14 @@
 </div>
 
 @section Scripts {
-    <style>
-        .validation-summary-valid {
-            display: none;
-        }
-    </style>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script>
-        let googleClientId = '@Model.GoogleClientId';
+        const googleClientId = '@Model.GoogleClientId';
+        const googleConfigured = googleClientId && !googleClientId.startsWith('YOUR_');
 
         // Initialize Google Sign-Up
         window.onload = function() {
-            if (!googleClientId) {
+            if (!googleConfigured) {
                 console.warn('GoogleAuth:ClientId is not configured.');
                 return;
             }
@@ -150,7 +149,7 @@
                 });
 
                 // Render an official Google button in a hidden container.
-                // We trigger this button from the custom styled button.
+                    if (!googleConfigured) {
                 google.accounts.id.renderButton(
                     document.getElementById('googleRegisterButton'),
                     {

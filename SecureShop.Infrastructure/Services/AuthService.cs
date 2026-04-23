@@ -84,10 +84,16 @@ public class AuthService : IAuthService
     {
         try
         {
+            var googleClientId = _config["GoogleAuth:ClientId"];
+            if (string.IsNullOrWhiteSpace(googleClientId) || googleClientId.StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new DomainException("Google Sign-In is not configured on the server.");
+            }
+
             // Validate the Google ID token
             var settings = new GoogleJsonWebSignature.ValidationSettings()
             {
-                Audience = new[] { _config["GoogleAuth:ClientId"]! }
+                Audience = new[] { googleClientId }
             };
 
             var payload = await GoogleJsonWebSignature.ValidateAsync(dto.IdToken, settings);

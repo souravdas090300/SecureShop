@@ -104,10 +104,16 @@
 @section Scripts {
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script>
-        let googleClientId = '@Model.GoogleClientId';
+        const googleClientId = '@Model.GoogleClientId';
+        const googleConfigured = googleClientId && !googleClientId.startsWith('YOUR_');
 
         // Initialize Google Sign-In
         window.onload = function() {
+            if (!googleConfigured) {
+                console.warn('GoogleAuth:ClientId is not configured.');
+                return;
+            }
+
             // Initialize Google Identity Services
             if (typeof google !== 'undefined') {
                 google.accounts.id.initialize({
@@ -118,6 +124,11 @@
         };
 
         function signInWithGoogle() {
+            if (!googleConfigured) {
+                alert('Google Sign-In is not configured yet. Please use email sign-in or set GoogleAuth:ClientId.');
+                return;
+            }
+
             // Trigger Google One Tap or the button flow
             if (typeof google !== 'undefined') {
                 google.accounts.id.prompt(); // Show One Tap dialog

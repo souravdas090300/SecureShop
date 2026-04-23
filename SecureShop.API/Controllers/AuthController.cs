@@ -1,5 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using SecureShop.Application.DTOs.Auth;
 using SecureShop.Application.Interfaces;
 
@@ -39,5 +43,38 @@ public class AuthController : ControllerBase
 
     [HttpPost("google-signin")]
     public async Task<ActionResult<AuthResponseDto>> GoogleSignIn([FromBody] GoogleSignInDto dto)
-        => Ok(await _authService.GoogleSignInAsync(dto));
+    {
+        var result = await _authService.GoogleSignInAsync(dto);
+
+        if (!string.IsNullOrWhiteSpace(result.Token))
+        {
+            var cookieOptions = new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = Request.IsHttps,
+                SameSite = SameSiteMode.Lax,
+                Expires = result.ExpiresAt
+            };
+
+            Response.Cookies.Append("AuthToken", result.Token, cookieOptions);
+            Response.Cookies.Append("UserEmail", result.Email ?? string.Empty, cookieOptions);
+            Response.Cookies.Append("UserName", result.FirstName ?? string.Empty, cookieOptions);
+
+            var handler = new JwtSecurityTokenHandler();
+            var jwtToken = handler.ReadJwtToken(result.Token);
+            var claimsIdentity = new ClaimsIdentity(jwtToken.Claims, CookieAuthenticationDefaults.AuthenticationScheme);
+            var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
+
+            await HttpContext.SignInAsync(
+                CookieAuthenticationDefaults.AuthenticationScheme,
+                claimsPrincipal,
+                new AuthenticationProperties
+                {
+                    IsPersistent = false,
+                    ExpiresUtc = result.ExpiresAt
+                });
+        }
+
+        return Ok(result);
+    }
 }
