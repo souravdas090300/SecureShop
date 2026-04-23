@@ -1,17 +1,17 @@
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
 using SecureShop.API.Middleware;
 using SecureShop.Application;
 using SecureShop.Infrastructure;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Hosting.Server;
-using Microsoft.AspNetCore.Hosting.Server.Features;
 
 // ── Early crash handler — visible in Railway deploy logs before Serilog starts ──
 AppDomain.CurrentDomain.UnhandledException += (_, e) =>
@@ -42,52 +42,41 @@ catch (Exception ex)
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
-// ── JWT Authentication ────────────────────────────────────────────────────────
-var jwtSecret = builder.Configuration["Jwt:Secret"] ?? "PLACEHOLDER_SET_JWT_SECRET_IN_RAILWAY_ENV";
+// ── Health checks ─────────────────────────────────────────────────────────────
+builder.Services.AddHealthChecks();
 
-builder.Services.AddAuthentication(options =>
-    {
-        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-        options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
-    })
+// ── JWT Authentication ────────────────────────────────────────────────────────
+var jwtSecret = builder.Configuration["Jwt:Secret"]
+    ?? throw new InvalidOperationException("Jwt:Secret is not configured. Set it in Railway environment variables.");
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
-            ValidateIssuer   = true, ValidIssuer   = builder.Configuration["Jwt:Issuer"],
-            ValidateAudience = true, ValidAudience = builder.Configuration["Jwt:Audience"],
-            ValidateLifetime = true, ClockSkew     = TimeSpan.Zero
+            IssuerSigningKey         = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+            ValidateIssuer           = true,
+            ValidIssuer              = builder.Configuration["Jwt:Issuer"],
+            ValidateAudience         = true,
+            ValidAudience            = builder.Configuration["Jwt:Audience"],
+            ValidateLifetime         = true,
+            ClockSkew                = TimeSpan.Zero
         };
     });
-
-builder.Services.ConfigureApplicationCookie(options =>
-{
-    options.Events.OnRedirectToLogin = context =>
-    {
-        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        return Task.CompletedTask;
-    };
-    options.Events.OnRedirectToAccessDenied = context =>
-    {
-        context.Response.StatusCode = StatusCodes.Status403Forbidden;
-        return Task.CompletedTask;
-    };
-});
 
 builder.Services.AddAuthorization();
 
 // ── Rate Limiting ─────────────────────────────────────────────────────────────
+// README: 100 req/min API, 10 req/min auth
 builder.Services.AddRateLimiter(options =>
 {
     options.AddFixedWindowLimiter("api", opt =>
     {
-        opt.PermitLimit            = 100;
-        opt.Window                 = TimeSpan.FromMinutes(1);
-        opt.QueueProcessingOrder   = QueueProcessingOrder.OldestFirst;
-        opt.QueueLimit             = 5;
+        opt.PermitLimit          = 100;
+        opt.Window               = TimeSpan.FromMinutes(1);
+        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        opt.QueueLimit           = 5;
     });
     options.AddFixedWindowLimiter("auth", opt =>
     {
@@ -109,19 +98,24 @@ builder.Services.AddCors(options =>
     });
 });
 
-// ── MVC + Swagger ─────────────────────────────────────────────────────────────
+// ── Controllers + Swagger ─────────────────────────────────────────────────────
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "SecureShop API", Version = "v1" });
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title       = "SecureShop API",
+        Version     = "v1",
+        Description = "Production-ready e-commerce REST API"
+    });
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Type        = SecuritySchemeType.Http,
-        Scheme      = "bearer",
+        Type         = SecuritySchemeType.Http,
+        Scheme       = "bearer",
         BearerFormat = "JWT",
-        Description = "Enter your JWT token"
+        Description  = "Enter your JWT token"
     });
 
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
@@ -140,7 +134,7 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// ── Port (Railway injects PORT env var) ─────────────────────────────────────
+// ── Port (Railway injects PORT env var) ──────────────────────────────────────
 // Use TryParse — int.Parse throws FormatException if PORT has whitespace or
 // unexpected content, which crashes the process before binding any port.
 var portRaw = Environment.GetEnvironmentVariable("PORT")?.Trim();
@@ -155,182 +149,107 @@ builder.WebHost.ConfigureKestrel(kestrel =>
 var app = builder.Build();
 // ═════════════════════════════════════════════════════════════════════════════
 
-// ── 1. Global exception handler — ALWAYS first ────────────────────────────────
+// ── Middleware pipeline (ORDER MATTERS) ───────────────────────────────────────
+
+// 1. Security headers — outermost so every response gets them
+app.UseMiddleware<SecurityHeadersMiddleware>();
+
+// 2. Global exception handler
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
-// ── 2. Swagger — Development only ────────────────────────────────────────────
+// 3. Swagger — Development only
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger(options => { options.SerializeAsV2 = false; });
-
-    app.Use(async (context, next) =>
-    {
-        var path = context.Request.Path.Value?.ToLowerInvariant() ?? string.Empty;
-        if (path == "/swagger" || path == "/swagger/" || path == "/swagger/index.html")
-        {
-            context.Response.ContentType = "text/html; charset=utf-8";
-            context.Response.Headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0";
-            context.Response.Headers["Pragma"] = "no-cache";
-            context.Response.Headers["Expires"] = "0";
-
-            await context.Response.WriteAsync("""
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SecureShop API Docs</title>
-    <link rel="stylesheet" href="./swagger-ui.css?v=20260407" />
-    <link rel="stylesheet" href="/swagger-ui/custom.css" />
-</head>
-<body>
-    <div id="swagger-ui"></div>
-    <script src="./swagger-ui-bundle.js?v=20260407"></script>
-    <script src="./swagger-ui-standalone-preset.js?v=20260407"></script>
-    <script>
-        window.onload = function () {
-            window.ui = SwaggerUIBundle({
-                url: '/swagger/v1/swagger.json?v=20260407',
-                dom_id: '#swagger-ui',
-                deepLinking: true,
-                presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
-                layout: 'StandaloneLayout'
-            });
-        };
-    </script>
-</body>
-</html>
-""");
-            return;
-        }
-
-        await next();
-    });
-
+    app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "SecureShop API v1");
-        c.RoutePrefix = "swagger";
+        c.RoutePrefix  = "swagger";
         c.DocumentTitle = "SecureShop API Docs";
         c.InjectStylesheet("/swagger-ui/custom.css");
-        c.ConfigObject.DeepLinking = true;
         c.EnableDeepLinking();
     });
 }
 
-// ── 3. Static files (serves /swagger-ui/custom.css etc.) ─────────────────────
+// 4. Static files (serves /swagger-ui/custom.css etc.)
 app.UseStaticFiles();
 
-// ── 4. Custom middleware — AFTER Swagger ──────────────────────────────────────
-//      FIX: was before UseSwagger; now safe because CacheBustingMiddleware
-//      skips /swagger and /docs paths internally
-app.UseMiddleware<CacheBustingMiddleware>();
-app.UseMiddleware<SecurityHeadersMiddleware>();
+// 5. Railway terminates TLS at the load balancer; the container only sees plain
+//    HTTP. UseHttpsRedirection and UseHsts must NOT run inside the container —
+//    they cause redirect loops behind a TLS-terminating proxy.
 
-// ── 5. HTTPS / HSTS ──────────────────────────────────────────────────────────
-// Railway terminates TLS at the load balancer; the container only sees plain
-// HTTP.  Enabling UseHttpsRedirection here would 301-redirect Railway's health
-// checker and every real request, breaking everything.  HSTS is also handled
-// externally on Railway, so both are intentionally omitted.
-
-// ── 6. Framework middleware ───────────────────────────────────────────────────
+// 6. Framework middleware
 app.UseCors("Production");
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// ── 7. Endpoints ──────────────────────────────────────────────────────────────
+// ── Endpoints ─────────────────────────────────────────────────────────────────
 app.MapControllers();
 
 // Health check — available in all environments for Railway
-app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    ResultStatusCodes =
+    {
+        [HealthStatus.Healthy]   = StatusCodes.Status200OK,
+        [HealthStatus.Degraded]  = StatusCodes.Status200OK,
+        [HealthStatus.Unhealthy] = StatusCodes.Status503ServiceUnavailable
+    }
+});
 
-// Docs endpoints (development only)
+// Root endpoint
 if (app.Environment.IsDevelopment())
 {
-    app.MapGet("/swagger.json", () => Results.Redirect("/swagger/v1/swagger.json"));
-    app.MapGet("/", () => Results.Redirect("/docs-new"));
+    app.MapGet("/", () => Results.Redirect("/swagger/"));
     app.MapGet("/docs", () => Results.Redirect("/swagger/"));
-    app.MapGet("/index.html", () => Results.Redirect("/swagger/"));
-    app.MapGet("/docs-new", (HttpRequest req) =>
-    {
-        var origin = $"{req.Scheme}://{req.Host}";
-        var specUrl = $"{origin}/swagger/v1/swagger.json?v=20260408";
-        var html = $$"""
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SecureShop API Docs (Isolated)</title>
-    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
-</head>
-<body>
-    <div id="swagger-ui"></div>
-    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-    <script>
-        window.ui = SwaggerUIBundle({
-            url: "{{specUrl}}",
-            dom_id: '#swagger-ui',
-            deepLinking: true,
-            presets: [SwaggerUIBundle.presets.apis],
-            layout: 'BaseLayout'
-        });
-    </script>
-</body>
-</html>
-""";
-
-        return Results.Content(html, "text/html");
-    });
 }
 else
 {
     app.MapGet("/", () => Results.Ok(new
     {
-        service = "SecureShop API",
-        status = "running",
-        endpoints = new
-        {
-            health = "/health"
-        }
+        service   = "SecureShop API",
+        version   = "1.0.0",
+        status    = "running",
+        timestamp = DateTime.UtcNow,
+        endpoints = new { health = "/health" }
     }));
 }
 
-// ── Database migration & seeding (background — runs AFTER server starts) ─────
-// Running migration before app.Run() blocks the port from opening, causing
-// Railway's healthcheck to see "service unavailable" while EF Core retries.
-// ApplicationStarted fires once Kestrel is fully bound and serving.
+// ── Database migration & seeding (background — runs AFTER Kestrel starts) ────
+// Running MigrateAsync before app.Run() blocks the port from opening, causing
+// Railway health checks to fail while EF Core retries the connection.
 Log.Information("Startup init: finished, starting web host");
-app.Lifetime.ApplicationStarted.Register(() =>
+
+_ = Task.Run(async () =>
 {
-    var server = app.Services.GetRequiredService<IServer>();
-    var addresses = server.Features.Get<IServerAddressesFeature>()?.Addresses;
-    if (addresses is not null)
-        foreach (var address in addresses)
-            Log.Information("Listening on {Address}", address);
-
-    _ = Task.Run(async () =>
+    try
     {
-        Log.Information("Startup init: database migration starting (background)");
-        try
-        {
-            using var scope = app.Services.CreateScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            await dbContext.Database.MigrateAsync();
-            Log.Information("Startup init: database migration completed");
+        await Task.Delay(2000); // give Kestrel a moment to bind
+        using var scope = app.Services.CreateScope();
 
-            var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-            foreach (var role in new[] { "Admin", "User" })
-                if (!await roleManager.RoleExistsAsync(role))
-                    await roleManager.CreateAsync(new IdentityRole(role));
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await db.Database.MigrateAsync();
+        Log.Information("Startup init: database migration completed");
 
-            Log.Information("Startup init: role seeding completed");
-        }
-        catch (Exception ex)
+        var roleManager = scope.ServiceProvider
+            .GetRequiredService<RoleManager<IdentityRole>>();
+
+        foreach (var role in new[] { "Admin", "Customer" })
         {
-            Log.Error(ex, "Startup init: database migration failed — ensure ConnectionStrings__DefaultConnection is set in Railway env vars");
+            if (!await roleManager.RoleExistsAsync(role))
+            {
+                await roleManager.CreateAsync(new IdentityRole(role));
+                Log.Information("Startup init: created role {Role}", role);
+            }
         }
-    });
+
+        Log.Information("Startup init: role seeding completed");
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "Startup init: migration/seeding failed — ensure ConnectionStrings__DefaultConnection is set in Railway env vars");
+    }
 });
+
 app.Run();
