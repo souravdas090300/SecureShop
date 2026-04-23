@@ -286,7 +286,15 @@ if (app.Environment.IsDevelopment())
 }
 else
 {
-    app.MapGet("/", () => Results.NotFound());
+    app.MapGet("/", () => Results.Ok(new
+    {
+        service = "SecureShop API",
+        status = "running",
+        endpoints = new
+        {
+            health = "/health"
+        }
+    }));
 }
 
 // ── Database migration & seeding (background — runs AFTER server starts) ─────
