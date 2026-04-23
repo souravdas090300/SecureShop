@@ -1,6 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using System.ComponentModel.DataAnnotations;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 
@@ -46,11 +50,16 @@ public class LoginModel : PageModel
     public async Task<IActionResult> OnPostAsync(string? returnUrl = null)
     {
         returnUrl ??= "/";
+        
+        Console.WriteLine($"[Login Page] OnPostAsync called - Email: '{Email}'");
 
         if (!ModelState.IsValid)
         {
+            Console.WriteLine($"[Login Page] ModelState is INVALID");
             return Page();
         }
+        
+        Console.WriteLine($"[Login Page] ModelState is valid, calling login API");
 
         try
         {
@@ -82,13 +91,32 @@ public class LoginModel : PageModel
                     var cookieOptions = new CookieOptions
                     {
                         HttpOnly = true,
-                        Secure = true,
-                        SameSite = SameSiteMode.Strict,
+                        Secure = Request.IsHttps,
+                        SameSite = SameSiteMode.Lax,
                         Expires = RememberMe ? DateTimeOffset.UtcNow.AddDays(30) : DateTimeOffset.UtcNow.AddHours(8)
                     };
                     Response.Cookies.Append("AuthToken", result.Token, cookieOptions);
                     Response.Cookies.Append("UserEmail", result.Email ?? "", cookieOptions);
                     Response.Cookies.Append("UserName", result.FirstName ?? "", cookieOptions);
+
+                    // Decode JWT token to get claims
+                    var handler = new JwtSecurityTokenHandler();
+                    var jwtToken = handler.ReadJwtToken(result.Token);
+                    
+                    // Create claims identity from JWT
+                    var claims = jwtToken.Claims.ToList();
+                    var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+                    var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
+
+                    // Sign in the user with Cookie Authentication
+                    await HttpContext.SignInAsync(
+                        CookieAuthenticationDefaults.AuthenticationScheme,
+                        claimsPrincipal,
+                        new AuthenticationProperties
+                        {
+                            IsPersistent = RememberMe,
+                            ExpiresUtc = RememberMe ? DateTimeOffset.UtcNow.AddDays(30) : DateTimeOffset.UtcNow.AddHours(8)
+                        });
 
                     return Redirect(returnUrl);
                 }

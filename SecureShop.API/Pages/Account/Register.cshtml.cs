@@ -1,6 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using System.ComponentModel.DataAnnotations;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
 
@@ -55,10 +59,26 @@ public class RegisterModel : PageModel
 
     public async Task<IActionResult> OnPostAsync()
     {
+        Console.WriteLine($"[Register Page] OnPostAsync called - Email: '{Email}', FirstName: '{FirstName}', LastName: '{LastName}', Password Length: {Password?.Length ?? 0}");
+        
         if (!ModelState.IsValid)
         {
+            Console.WriteLine($"[Register Page] ModelState is INVALID");
+            var errors = new List<string>();
+            foreach (var error in ModelState)
+            {
+                var errorMessages = string.Join(", ", error.Value?.Errors.Select(e => e.ErrorMessage) ?? Array.Empty<string>());
+                if (!string.IsNullOrEmpty(errorMessages))
+                {
+                    Console.WriteLine($"  - {error.Key}: {errorMessages}");
+                    errors.Add($"{error.Key}: {errorMessages}");
+                }
+            }
+            ErrorMessage = "Please fix the following errors: " + string.Join("; ", errors);
             return Page();
         }
+
+        Console.WriteLine($"[Register Page] ModelState is valid, calling registration API");
 
         try
         {
@@ -92,13 +112,32 @@ public class RegisterModel : PageModel
                     var cookieOptions = new CookieOptions
                     {
                         HttpOnly = true,
-                        Secure = true,
-                        SameSite = SameSiteMode.Strict,
+                        Secure = Request.IsHttps,
+                        SameSite = SameSiteMode.Lax,
                         Expires = DateTimeOffset.UtcNow.AddHours(8)
                     };
                     Response.Cookies.Append("AuthToken", result.Token, cookieOptions);
                     Response.Cookies.Append("UserEmail", result.Email ?? "", cookieOptions);
                     Response.Cookies.Append("UserName", result.FirstName ?? "", cookieOptions);
+
+                    // Decode JWT token to get claims
+                    var handler = new JwtSecurityTokenHandler();
+                    var jwtToken = handler.ReadJwtToken(result.Token);
+                    
+                    // Create claims identity from JWT
+                    var claims = jwtToken.Claims.ToList();
+                    var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+                    var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
+
+                    // Sign in the user with Cookie Authentication
+                    await HttpContext.SignInAsync(
+                        CookieAuthenticationDefaults.AuthenticationScheme,
+                        claimsPrincipal,
+                        new AuthenticationProperties
+                        {
+                            IsPersistent = false,
+                            ExpiresUtc = DateTimeOffset.UtcNow.AddHours(8)
+                        });
 
                     TempData["SuccessMessage"] = "Registration successful! Welcome to SecureShop.";
                     return RedirectToPage("/Index");

@@ -32,23 +32,24 @@ public class SecurityHeadersMiddleware
             h["X-Frame-Options"] = "SAMEORIGIN";
             h["Content-Security-Policy"] =
                 "default-src 'self'; " +
-                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
-                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; " +
+                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://accounts.google.com https://code.jquery.com; " +
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://accounts.google.com; " +
                 "img-src 'self' data: https:; " +
                 "font-src 'self' data: https://cdnjs.cloudflare.com; " +
-                "connect-src 'self' https://localhost:5001 http://localhost:5000; " +
+                "connect-src 'self' https://localhost:5001 http://localhost:5000 http://localhost:8080 https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://accounts.google.com; " +
                 "frame-ancestors 'self';";
         }
         else
         {
-            // Production CSP - Allow CDN resources for Bootstrap and Font Awesome
+            // Production CSP - Allow CDN resources for Bootstrap, Font Awesome, jQuery, and Google OAuth
             h["X-Frame-Options"] = "DENY";
             h["Content-Security-Policy"] =
                 "default-src 'self'; " +
-                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
-                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; " +
+                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://accounts.google.com https://code.jquery.com; " +
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://accounts.google.com; " +
                 "img-src 'self' data: https:; " +
                 "font-src 'self' data: https://cdnjs.cloudflare.com; " +
+                "connect-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://accounts.google.com; " +
                 "base-uri 'self'; " +
                 "form-action 'self'; " +
                 "frame-ancestors 'none';";

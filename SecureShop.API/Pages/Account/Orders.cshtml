@@ -1,0 +1,132 @@
+@page
+@model SecureShop.API.Pages.Account.OrdersModel
+@{
+    ViewData["Title"] = "My Orders";
+}
+
+<div class="container py-5">
+    <div class="row">
+        <div class="col-12">
+            <!-- Header -->
+            <div class="text-center mb-5">
+                <h1 class="display-5 fw-bold">
+                    <i class="fas fa-box text-primary me-2"></i>My Orders
+                </h1>
+                <p class="text-muted">Track and manage your order history</p>
+            </div>
+
+            @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+            {
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <i class="fas fa-exclamation-circle me-2"></i>@Model.ErrorMessage
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            }
+
+            @if (Model.Orders.Any())
+            {
+                <!-- Orders List -->
+                <div class="row g-4">
+                    @foreach (var order in Model.Orders.OrderByDescending(o => o.CreatedAt))
+                    {
+                        <div class="col-12">
+                            <div class="card shadow-sm">
+                                <div class="card-header bg-white py-3">
+                                    <div class="row align-items-center">
+                                        <div class="col-md-3">
+                                            <strong>Order #@order.Id</strong>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <small class="text-muted">
+                                                <i class="far fa-calendar me-1"></i>
+                                                @order.CreatedAt.ToString("MMM dd, yyyy")
+                                            </small>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <span class="badge @GetStatusBadgeClass(order.Status) px-3 py-2">
+                                                @order.Status
+                                            </span>
+                                        </div>
+                                        <div class="col-md-3 text-end">
+                                            <strong class="text-primary fs-5">
+                                                $@order.TotalAmount.ToString("F2")
+                                            </strong>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    @if (order.Items.Any())
+                                    {
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-borderless mb-0">
+                                                <thead>
+                                                    <tr class="text-muted">
+                                                        <th>Product</th>
+                                                        <th class="text-center">Quantity</th>
+                                                        <th class="text-end">Price</th>
+                                                        <th class="text-end">Subtotal</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var item in order.Items)
+                                                    {
+                                                        <tr>
+                                                            <td>@item.ProductName</td>
+                                                            <td class="text-center">@item.Quantity</td>
+                                                            <td class="text-end">$@item.Price.ToString("F2")</td>
+                                                            <td class="text-end">$@((item.Quantity * item.Price).ToString("F2"))</td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <p class="text-muted mb-0">No items in this order</p>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <!-- Empty State -->
+                <div class="text-center py-5">
+                    <div class="mb-4">
+                        <i class="fas fa-box-open fa-5x text-muted"></i>
+                    </div>
+                    <h3 class="mb-3">No Orders Yet</h3>
+                    <p class="text-muted mb-4">You haven't placed any orders. Start shopping to see your order history here.</p>
+                    <a href="/products" class="btn btn-primary btn-lg">
+                        <i class="fas fa-shopping-bag me-2"></i>Browse Products
+                    </a>
+                </div>
+            }
+
+            <!-- Back Button -->
+            <div class="text-center mt-5">
+                <a href="/" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-2"></i>Back to Home
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+@functions {
+    private string GetStatusBadgeClass(string status)
+    {
+        return status?.ToLower() switch
+        {
+            "pending" => "bg-warning text-dark",
+            "processing" => "bg-info text-white",
+            "shipped" => "bg-primary text-white",
+            "delivered" => "bg-success text-white",
+            "cancelled" => "bg-danger text-white",
+            _ => "bg-secondary text-white"
+        };
+    }
+}

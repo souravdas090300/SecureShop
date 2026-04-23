@@ -55,12 +55,28 @@ public class AuthService : IAuthService
 
     public async Task<AuthResponseDto> LoginAsync(LoginDto dto)
     {
-        var user = await _userManager.FindByEmailAsync(dto.Email)
-            ?? throw new DomainException("Invalid credentials");
-
-        if (!await _userManager.CheckPasswordAsync(user, dto.Password))
+        Console.WriteLine($"[AuthService] Login attempt - Email: '{dto.Email}', Password length: {dto.Password?.Length ?? 0}");
+        
+        var user = await _userManager.FindByEmailAsync(dto.Email);
+        
+        if (user == null)
+        {
+            Console.WriteLine($"[AuthService] User not found for email: '{dto.Email}'");
             throw new DomainException("Invalid credentials");
+        }
+        
+        Console.WriteLine($"[AuthService] User found: ID={user.Id}, Email={user.Email}");
+        
+        var passwordValid = await _userManager.CheckPasswordAsync(user, dto.Password);
+        Console.WriteLine($"[AuthService] Password check result: {passwordValid}");
+        
+        if (!passwordValid)
+        {
+            Console.WriteLine($"[AuthService] Invalid password for user: '{dto.Email}'");
+            throw new DomainException("Invalid credentials");
+        }
 
+        Console.WriteLine($"[AuthService] Login successful for: '{dto.Email}'");
         return await GenerateTokenAsync(user);
     }
 

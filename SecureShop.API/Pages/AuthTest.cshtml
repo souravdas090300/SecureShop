@@ -1,0 +1,40 @@
+@page
+@{
+    ViewData["Title"] = "Auth Test";
+}
+
+<div class="container py-5">
+    <div class="card">
+        <div class="card-header bg-info text-white">
+            <h3>Authentication Test Page</h3>
+        </div>
+        <div class="card-body">
+            <h4>Authentication Status:</h4>
+            @if (User.Identity?.IsAuthenticated == true)
+            {
+                <div class="alert alert-success">
+                    <h5>✅ YOU ARE LOGGED IN!</h5>
+                    <p><strong>Email:</strong> @User.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.Email)?.Value</p>
+                    <p><strong>Name:</strong> @User.Claims.FirstOrDefault(c => c.Type == System.Security.Claims.ClaimTypes.GivenName)?.Value</p>
+                    <p><strong>Roles:</strong> @string.Join(", ", User.Claims.Where(c => c.Type == System.Security.Claims.ClaimTypes.Role).Select(c => c.Value))</p>
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-danger">
+                    <h5>❌ NOT LOGGED IN</h5>
+                    <p>You are not authenticated.</p>
+                </div>
+            }
+
+            <h4 class="mt-4">Cookie Information:</h4>
+            <pre>@string.Join("\n", Request.Cookies.Select(c => $"{c.Key}: {c.Value.Substring(0, Math.Min(50, c.Value.Length))}..."))</pre>
+
+            <div class="mt-4">
+                <a href="/account/login" class="btn btn-primary">Go to Login</a>
+                <a href="/account/register" class="btn btn-success">Go to Register</a>
+                <a href="/" class="btn btn-secondary">Go to Home</a>
+            </div>
+        </div>
+    </div>
+</div>
