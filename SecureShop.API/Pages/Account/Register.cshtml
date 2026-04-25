@@ -27,9 +27,13 @@
                         <div asp-validation-summary="All" class="alert alert-danger" role="alert"></div>
                     }
 
-                    <!-- Google Sign Up -->
+                    <!-- Google Sign Up - Config: @Model.GoogleClientId -->
                     <div class="d-grid mb-3">
-                        <button type="button" class="btn btn-outline-danger btn-lg" onclick="signUpWithGoogle()">
+                        <button type="button" 
+                                id="googleSignUpBtn" 
+                                class="btn btn-outline-danger btn-lg" 
+                                data-google-client-id="@Model.GoogleClientId"
+                                onclick="signUpWithGoogle()">
                             <i class="fab fa-google me-2"></i> Sign up with Google
                         </button>
                     </div>
@@ -132,12 +136,13 @@
     <!-- Page Version: v2.0 - Force Cache Bust -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script>
-        // FORCE CACHE CLEAR - Version 2.0
-        const googleClientId = '@Model.GoogleClientId';
-        const googleConfigured = googleClientId && !googleClientId.startsWith('YOUR_');
+        // FORCE CACHE CLEAR - Version 3.0 - Read from DOM
+        const googleSignUpBtn = document.getElementById('googleSignUpBtn');
+        const googleClientId = googleSignUpBtn ? googleSignUpBtn.getAttribute('data-google-client-id') : '@Model.GoogleClientId';
+        const googleConfigured = googleClientId && googleClientId.length > 30 && !googleClientId.startsWith('YOUR_');
         
         // Debug logging
-        console.log('=== Google Auth Configuration v2.0 ===');
+        console.log('=== Google Auth Configuration v3.0 (from DOM) ===');
         console.log('Google Client ID:', googleClientId);
         console.log('Google Configured:', googleConfigured);
         console.log('Client ID length:', googleClientId.length);
