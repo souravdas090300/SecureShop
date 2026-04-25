@@ -129,12 +129,15 @@
 </div>
 
 @section Scripts {
+    <!-- Page Version: v2.0 - Force Cache Bust -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script>
+        // FORCE CACHE CLEAR - Version 2.0
         const googleClientId = '@Model.GoogleClientId';
         const googleConfigured = googleClientId && !googleClientId.startsWith('YOUR_');
         
         // Debug logging
+        console.log('=== Google Auth Configuration v2.0 ===');
         console.log('Google Client ID:', googleClientId);
         console.log('Google Configured:', googleConfigured);
         console.log('Client ID length:', googleClientId.length);

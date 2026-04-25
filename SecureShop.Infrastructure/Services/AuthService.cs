@@ -67,6 +67,11 @@ public class AuthService : IAuthService
         
         Console.WriteLine($"[AuthService] User found: ID={user.Id}, Email={user.Email}");
         
+        if (string.IsNullOrEmpty(dto.Password))
+        {
+            throw new DomainException("Invalid credentials");
+        }
+        
         var passwordValid = await _userManager.CheckPasswordAsync(user, dto.Password);
         Console.WriteLine($"[AuthService] Password check result: {passwordValid}");
         
