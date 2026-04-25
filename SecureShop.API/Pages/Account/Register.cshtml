@@ -4,6 +4,12 @@
     ViewData["Title"] = "Register";
 }
 
+@section Head {
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+}
+
 <div class="container py-5">
     <div class="row justify-content-center">
         <div class="col-md-7 col-lg-6">
@@ -133,9 +139,16 @@
     <script>
         const googleClientId = '@Model.GoogleClientId';
         const googleConfigured = googleClientId && !googleClientId.startsWith('YOUR_');
+        
+        // Debug logging
+        console.log('Google Client ID:', googleClientId);
+        console.log('Google Configured:', googleConfigured);
+        console.log('Client ID length:', googleClientId.length);
+        console.log('Starts with YOUR_:', googleClientId.startsWith('YOUR_'));
 
         // Initialize Google Sign-Up
         window.onload = function() {
+            console.log('window.onload fired, googleConfigured:', googleConfigured);
             if (!googleConfigured) {
                 console.warn('GoogleAuth:ClientId is not configured.');
                 return;
@@ -162,6 +175,9 @@
         };
 
         function signUpWithGoogle() {
+            console.log('signUpWithGoogle called, googleConfigured:', googleConfigured);
+            console.log('googleClientId:', googleClientId);
+            
             if (!googleConfigured) {
                 alert('Google Sign-Up is not configured yet. Please use email registration or contact the administrator to set up GoogleAuth:ClientId.');
                 return;
