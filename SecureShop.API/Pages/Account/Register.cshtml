@@ -162,8 +162,8 @@
         };
 
         function signUpWithGoogle() {
-            if (!googleClientId) {
-                alert('Google Sign-Up is not configured yet. Please use email registration or set GoogleAuth:ClientId.');
+            if (!googleConfigured) {
+                alert('Google Sign-Up is not configured yet. Please use email registration or contact the administrator to set up GoogleAuth:ClientId.');
                 return;
             }
 
