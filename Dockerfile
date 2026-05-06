@@ -9,6 +9,7 @@ COPY SecureShop.Application/SecureShop.Application.csproj         SecureShop.App
 COPY SecureShop.Domain/SecureShop.Domain.csproj                   SecureShop.Domain/
 COPY SecureShop.Infrastructure/SecureShop.Infrastructure.csproj   SecureShop.Infrastructure/
 COPY SecureShop.UnitTests/SecureShop.UnitTests.csproj             SecureShop.UnitTests/
+COPY SecureShop.IntegrationTests/SecureShop.IntegrationTests.csproj  SecureShop.IntegrationTests/
 
 # Restore NuGet packages
 RUN dotnet restore
