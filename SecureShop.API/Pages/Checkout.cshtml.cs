@@ -7,33 +7,49 @@ using System.Text.Json;
 
 namespace SecureShop.API.Pages;
 
+/// <summary>
+/// Page model for the checkout page.
+/// Requires authentication (<see cref="AuthorizeAttribute"/>).
+/// Collects shipping and contact details plus the cart items (posted as JSON from
+/// the client-side localStorage cart), then submits the order to the internal
+/// Orders API with the user's JWT from the auth cookie.
+/// Card payment data is handled entirely client-side via Stripe.js — raw card
+/// numbers are never bound or processed by this model.
+/// </summary>
 [Authorize]
 public class CheckoutModel : PageModel
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
+    private readonly ILogger<CheckoutModel> _logger;
 
+    /// <summary>Customer's given name, required for the shipping label.</summary>
     [BindProperty]
     [Required(ErrorMessage = "First name is required")]
     public string FirstName { get; set; } = string.Empty;
 
+    /// <summary>Customer's family name, required for the shipping label.</summary>
     [BindProperty]
     [Required(ErrorMessage = "Last name is required")]
     public string LastName { get; set; } = string.Empty;
 
+    /// <summary>Contact email for order confirmation messages.</summary>
     [BindProperty]
     [Required(ErrorMessage = "Email is required")]
     [EmailAddress(ErrorMessage = "Invalid email address")]
     public string Email { get; set; } = string.Empty;
 
+    /// <summary>Optional contact phone number.</summary>
     [BindProperty]
     [Phone(ErrorMessage = "Invalid phone number")]
     public string? Phone { get; set; }
 
+    /// <summary>Street address for delivery.</summary>
     [BindProperty]
     [Required(ErrorMessage = "Address is required")]
     public string Address { get; set; } = string.Empty;
 
+    /// <summary>City component of the delivery address.</summary>
     [BindProperty]
     [Required(ErrorMessage = "City is required")]
     public string City { get; set; } = string.Empty;
@@ -50,24 +66,21 @@ public class CheckoutModel : PageModel
     [Required(ErrorMessage = "Country is required")]
     public string Country { get; set; } = "US";
 
+    /// <summary>
+    /// Cart items serialised as JSON by the client-side script before form submission.
+    /// Expected format: <c>[{"productId":"&lt;guid&gt;","quantity":&lt;int&gt;}]</c>.
+    /// </summary>
     [BindProperty]
-    [Required(ErrorMessage = "Card number is required")]
-    public string CardNumber { get; set; } = string.Empty;
-
-    [BindProperty]
-    [Required(ErrorMessage = "Expiry date is required")]
-    public string ExpiryDate { get; set; } = string.Empty;
-
-    [BindProperty]
-    [Required(ErrorMessage = "CVV is required")]
-    public string CVV { get; set; } = string.Empty;
+    [Required(ErrorMessage = "Your cart is empty. Please add items before checking out.")]
+    public string CartItemsJson { get; set; } = string.Empty;
 
     public string? ErrorMessage { get; set; }
 
-    public CheckoutModel(IHttpClientFactory httpClientFactory, IConfiguration configuration)
+    public CheckoutModel(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<CheckoutModel> logger)
     {
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
+        _logger = logger;
     }
 
     public void OnGet()
@@ -83,6 +96,27 @@ public class CheckoutModel : PageModel
 
     public async Task<IActionResult> OnPostAsync()
     {
+        // Deserialise cart items before model-state validation so we can show
+        // a friendly error if the cart is empty or malformed.
+        List<CartItemRequest> cartItems;
+        try
+        {
+            cartItems = JsonSerializer.Deserialize<List<CartItemRequest>>(
+                CartItemsJson ?? "[]",
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
+                ?? new List<CartItemRequest>();
+        }
+        catch (JsonException)
+        {
+            cartItems = new List<CartItemRequest>();
+        }
+
+        if (cartItems.Count == 0)
+        {
+            ErrorMessage = "Your cart is empty. Please add items before checking out.";
+            return Page();
+        }
+
         if (!ModelState.IsValid)
         {
             return Page();
@@ -91,37 +125,20 @@ public class CheckoutModel : PageModel
         try
         {
             var client = _httpClientFactory.CreateClient();
-            var baseUrl = _configuration["ApiBaseUrl"] ?? "http://localhost:8080";
+            var baseUrl = $"{Request.Scheme}://{Request.Host}";
 
-            // Get JWT token from cookie
+            // Attach JWT so the Orders API can identify the user.
             var token = Request.Cookies["AuthToken"];
             if (!string.IsNullOrEmpty(token))
             {
-                client.DefaultRequestHeaders.Authorization = 
+                client.DefaultRequestHeaders.Authorization =
                     new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
             }
 
-            // Create order data
+            // CreateOrderDto only needs Items — card data is handled by Stripe.js client-side.
             var orderData = new
             {
-                shippingAddress = new
-                {
-                    firstName = FirstName,
-                    lastName = LastName,
-                    email = Email,
-                    phone = Phone,
-                    address = Address,
-                    city = City,
-                    state = State,
-                    zipCode = ZipCode,
-                    country = Country
-                },
-                paymentMethod = new
-                {
-                    cardNumber = CardNumber.Replace(" ", ""),
-                    expiryDate = ExpiryDate,
-                    cvv = CVV
-                }
+                items = cartItems.Select(i => new { productId = i.ProductId, quantity = i.Quantity })
             };
 
             var json = JsonSerializer.Serialize(orderData);
@@ -132,39 +149,45 @@ public class CheckoutModel : PageModel
             if (response.IsSuccessStatusCode)
             {
                 var responseJson = await response.Content.ReadAsStringAsync();
-                var result = JsonSerializer.Deserialize<OrderResponse>(responseJson, new JsonSerializerOptions 
-                { 
-                    PropertyNameCaseInsensitive = true 
+                var result = JsonSerializer.Deserialize<OrderResponse>(responseJson, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
                 });
 
-                if (result?.Id != null)
+                if (result?.Id != Guid.Empty)
                 {
-                    // Clear cart in browser (will be done via JavaScript)
                     TempData["SuccessMessage"] = $"Order #{result.Id} placed successfully!";
-                    TempData["OrderId"] = result.Id;
+                    TempData["OrderId"] = result.Id.ToString();
                     return RedirectToPage("/Account/Orders");
                 }
             }
             else
             {
                 var errorContent = await response.Content.ReadAsStringAsync();
+                _logger.LogWarning("Order creation failed ({StatusCode}): {Body}", response.StatusCode, errorContent);
                 ErrorMessage = "Failed to process your order. Please try again.";
-                Console.WriteLine($"Order creation failed: {errorContent}");
             }
         }
         catch (Exception ex)
         {
+            _logger.LogError(ex, "Checkout error for user {Email}", Email);
             ErrorMessage = "An error occurred while processing your order. Please try again.";
-            Console.WriteLine($"Checkout error: {ex.Message}");
         }
 
         return Page();
     }
 
-    private class OrderResponse
+    /// <summary>Represents a single cart line item as posted from the client-side cart.</summary>
+    private sealed class CartItemRequest
     {
-        public int Id { get; set; }
+        public Guid ProductId { get; set; }
+        public int Quantity { get; set; }
+    }
+
+    private sealed class OrderResponse
+    {
+        public Guid Id { get; set; }
         public string? Status { get; set; }
-        public decimal Total { get; set; }
+        public decimal TotalAmount { get; set; }
     }
 }

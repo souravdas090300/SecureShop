@@ -1,8 +1,10 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
@@ -48,6 +50,18 @@ builder.Services.AddInfrastructureServices(builder.Configuration);
 // ── HttpClient for Razor Pages to call API ───────────────────────────────────
 builder.Services.AddHttpClient();
 
+// ── Data Protection with persistent keys ──────────────────────────────────────
+// CRITICAL: Without persistent keys, cookie encryption keys change on every restart
+// causing all existing cookies to become unreadable
+var keysDirectory = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "DataProtection-Keys");
+Directory.CreateDirectory(keysDirectory);
+
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(keysDirectory))
+    .SetApplicationName("SecureShop");
+
+Console.WriteLine($"[STARTUP] Data Protection keys directory: {keysDirectory}");
+
 // ── Health checks ─────────────────────────────────────────────────────────────
 builder.Services.AddHealthChecks();
 
@@ -57,12 +71,14 @@ var jwtSecret = builder.Configuration["Jwt:Secret"]
 
 builder.Services.AddAuthentication(options =>
     {
-        // Use Cookies as default for Razor Pages
-        options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+        // CRITICAL: All three defaults must be set for cookie authentication to work
+        options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+        options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
         options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
     })
-    .AddCookie(options =>
+    .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
     {
+        options.Cookie.Name = ".SecureShop.User";
         options.LoginPath = "/account/login";
         options.LogoutPath = "/account/logout";
         options.AccessDeniedPath = "/account/login";
@@ -71,40 +87,65 @@ builder.Services.AddAuthentication(options =>
         options.Cookie.HttpOnly = true;
         options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
         options.Cookie.SameSite = SameSiteMode.Lax;
-        
-        // Read JWT token from cookie for Razor Pages
+        options.Cookie.IsEssential = true;
         options.Events = new CookieAuthenticationEvents
         {
-            OnValidatePrincipal = async context =>
+            OnSigningIn = context =>
             {
-                var token = context.Request.Cookies["AuthToken"];
-                if (!string.IsNullOrEmpty(token))
+                Console.WriteLine($"[UserAuth] OnSigningIn - Principal: {context.Principal?.Identity?.Name}");
+                return Task.CompletedTask;
+            },
+            OnSignedIn = context =>
+            {
+                Console.WriteLine($"[UserAuth] OnSignedIn - User signed in successfully");
+                return Task.CompletedTask;
+            },
+            OnValidatePrincipal = context =>
+            {
+                Console.WriteLine($"[UserAuth] OnValidatePrincipal - IsAuthenticated: {context.Principal?.Identity?.IsAuthenticated}, Name: {context.Principal?.Identity?.Name}");
+                return Task.CompletedTask;
+            }
+        };
+    })
+    .AddCookie("AdminCookie", options =>
+    {
+        options.Cookie.Name = ".SecureShop.Admin";
+        options.LoginPath = "/admin/login";
+        options.LogoutPath = "/admin/logout";
+        options.AccessDeniedPath = "/admin/login";
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        options.SlidingExpiration = true;
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.IsEssential = true;
+        options.Events = new CookieAuthenticationEvents
+        {
+            OnSigningIn = context =>
+            {
+                Console.WriteLine($"[AdminAuth] OnSigningIn - Principal: {context.Principal?.Identity?.Name}");
+                return Task.CompletedTask;
+            },
+            OnSignedIn = context =>
+            {
+                Console.WriteLine($"[AdminAuth] OnSignedIn - Admin signed in successfully");
+                return Task.CompletedTask;
+            },
+            OnValidatePrincipal = context =>
+            {
+                Console.WriteLine($"[AdminAuth] OnValidatePrincipal - IsAuthenticated: {context.Principal?.Identity?.IsAuthenticated}, Name: {context.Principal?.Identity?.Name}");
+                
+                // Validate that the user still has Admin role
+                if (context.Principal?.Identity?.IsAuthenticated == true)
                 {
-                    try
+                    var isAdmin = context.Principal.IsInRole("Admin");
+                    if (!isAdmin)
                     {
-                        var tokenHandler = new JwtSecurityTokenHandler();
-                        var key = Encoding.UTF8.GetBytes(jwtSecret);
-                        var validationParameters = new TokenValidationParameters
-                        {
-                            ValidateIssuerSigningKey = true,
-                            IssuerSigningKey = new SymmetricSecurityKey(key),
-                            ValidateIssuer = true,
-                            ValidIssuer = builder.Configuration["Jwt:Issuer"],
-                            ValidateAudience = true,
-                            ValidAudience = builder.Configuration["Jwt:Audience"],
-                            ValidateLifetime = true,
-                            ClockSkew = TimeSpan.Zero
-                        };
-                        
-                        var principal = tokenHandler.ValidateToken(token, validationParameters, out _);
-                        context.Principal = principal;
-                    }
-                    catch
-                    {
+                        Console.WriteLine($"[AdminAuth] User no longer has Admin role - rejecting principal");
                         context.RejectPrincipal();
                     }
                 }
-                await Task.CompletedTask;
+                return Task.CompletedTask;
             }
         };
     })
@@ -136,6 +177,13 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminApiPolicy", policy =>
     {
         policy.AuthenticationSchemes.Add(JwtBearerDefaults.AuthenticationScheme);
+        policy.RequireRole("Admin");
+    });
+    
+    // Admin Razor Pages
+    options.AddPolicy("AdminPolicy", policy =>
+    {
+        policy.AuthenticationSchemes.Add("AdminCookie");
         policy.RequireRole("Admin");
     });
 });
@@ -214,7 +262,12 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // ── Razor Pages for Frontend ─────────────────────────────────────────────────
-builder.Services.AddRazorPages();
+builder.Services.AddRazorPages(options =>
+{
+    // Admin pages require AdminCookie authentication scheme
+    options.Conventions.AuthorizeFolder("/Admin", "AdminPolicy");
+    options.Conventions.AllowAnonymousToPage("/Admin/Login");
+});
 
 // ── Port (Railway injects PORT env var) ──────────────────────────────────────
 // Use TryParse — int.Parse throws FormatException if PORT has whitespace or
@@ -256,6 +309,22 @@ app.UseSwaggerUI(c =>
 // 4. Static files (serves /swagger-ui/custom.css etc.)
 app.UseStaticFiles();
 
+// 4.5. Clear old corrupted cookies (from before Data Protection keys were persisted)
+app.Use(async (context, next) =>
+{
+    // Delete ALL old cookies from previous failed authentication attempts
+    var cookiesToDelete = new[] { ".SecureShop.Auth", ".SecureShop.Auth.v2", ".SecureShop.Auth.v3", "UserEmail", "UserName" };
+    foreach (var cookieName in cookiesToDelete)
+    {
+        if (context.Request.Cookies.ContainsKey(cookieName))
+        {
+            context.Response.Cookies.Delete(cookieName, new CookieOptions { Path = "/" });
+            Console.WriteLine($"[Middleware] Deleted old cookie: {cookieName}");
+        }
+    }
+    await next();
+});
+
 // 5. Railway terminates TLS at the load balancer; the container only sees plain
 //    HTTP. UseHttpsRedirection and UseHsts must NOT run inside the container —
 //    they cause redirect loops behind a TLS-terminating proxy.
@@ -263,8 +332,25 @@ app.UseStaticFiles();
 // 6. Framework middleware
 app.UseCors("Production");
 app.UseRateLimiter();
+app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Add middleware to debug authentication on every request
+app.Use(async (context, next) =>
+{
+    Console.WriteLine($"[Middleware] Request: {context.Request.Method} {context.Request.Path}");
+    Console.WriteLine($"[Middleware] Cookies count: {context.Request.Cookies.Count}");
+    foreach (var cookie in context.Request.Cookies)
+    {
+        Console.WriteLine($"[Middleware] Cookie: {cookie.Key} = {cookie.Value.Substring(0, Math.Min(20, cookie.Value.Length))}...");
+    }
+    Console.WriteLine($"[Middleware] BEFORE next() - IsAuthenticated: {context.User?.Identity?.IsAuthenticated}");
+    
+    await next();
+    
+    Console.WriteLine($"[Middleware] AFTER next() - IsAuthenticated: {context.User?.Identity?.IsAuthenticated}");
+});
 
 // ── Endpoints ─────────────────────────────────────────────────────────────────
 // Map API controllers under /api prefix
@@ -284,8 +370,13 @@ app.MapHealthChecks("/health", new HealthCheckOptions
     }
 });
 
-// Swagger available at /api/swagger for developers
+// Convenience redirect: /api/swagger → /swagger
 app.MapGet("/api/swagger", () => Results.Redirect("/swagger"));
+
+// ── Privacy & Terms clean URLs (required for Google OAuth branding) ───────────
+// Actual HTML files live in wwwroot/privacy.html and wwwroot/terms.html.
+app.MapGet("/privacy", () => Results.Redirect("/privacy.html"));
+app.MapGet("/terms",   () => Results.Redirect("/terms.html"));
 
 // API status endpoint (for monitoring/health checks)
 app.MapGet("/api/status", () =>
@@ -306,6 +397,26 @@ app.MapGet("/api/status", () =>
         }
     };
     return Results.Json(response);
+});
+
+// Debug endpoint to check authentication status
+app.MapGet("/api/auth/status", (HttpContext context) =>
+{
+    var isAuthenticated = context.User?.Identity?.IsAuthenticated ?? false;
+    var name = context.User?.Identity?.Name;
+    var email = context.User?.FindFirst(ClaimTypes.Email)?.Value;
+    var claims = context.User?.Claims.Select(c => new { c.Type, c.Value }).ToList();
+    
+    Console.WriteLine($"[Auth Status] IsAuthenticated: {isAuthenticated}, Name: {name}, Email: {email}");
+    
+    return Results.Json(new
+    {
+        isAuthenticated,
+        name,
+        email,
+        claimsCount = claims?.Count ?? 0,
+        claims
+    });
 });
 
 // ── Database migration & seeding (background — runs AFTER Kestrel starts) ────

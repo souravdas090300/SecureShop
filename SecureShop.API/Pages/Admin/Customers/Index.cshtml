@@ -1,0 +1,92 @@
+@page
+@model SecureShop.API.Pages.Admin.Customers.AdminCustomersModel
+@{ ViewData["Title"] = "Customers"; }
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-1"><i class="fas fa-users me-2"></i>Customers</h2>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0">
+            <li class="breadcrumb-item"><a href="/admin">Dashboard</a></li>
+            <li class="breadcrumb-item active">Customers</li>
+        </ol></nav>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-5">
+                <input type="text" class="form-control" id="searchInput" placeholder="Search by name or email...">
+            </div>
+            <div class="col-md-3">
+                <button class="btn btn-outline-secondary" onclick="clearSearch()"><i class="fas fa-redo me-1"></i>Reset</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body">
+        <table class="table table-hover align-middle" id="customersTable">
+            <thead class="table-light">
+                <tr><th>Customer</th><th>Email</th><th>Joined</th><th>Orders</th><th>Total Spent</th></tr>
+            </thead>
+            <tbody>
+                <tr><td colspan="5" class="text-center py-4">
+                    <div class="spinner-border text-primary"></div><div class="mt-2 text-muted">Loading...</div>
+                </td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+const apiBaseUrl = '@Model.ApiBaseUrl';
+let allCustomers = [];
+
+async function loadCustomers() {
+    try {
+        const res = await fetch(`${apiBaseUrl}/api/auth/users`, {
+            credentials: 'include'
+        });
+        if (res.ok) {
+            allCustomers = await res.json();
+            renderCustomers(allCustomers);
+        } else {
+            showTableMsg('customersTable', 5, 'Unable to load customers. Ensure /api/users endpoint exists.');
+        }
+    } catch(e) {
+        showTableMsg('customersTable', 5, 'Server connection failed.');
+    }
+}
+
+function renderCustomers(customers) {
+    const tbody = document.querySelector('#customersTable tbody');
+    if (!customers.length) { showTableMsg('customersTable', 5, 'No customers found.'); return; }
+    tbody.innerHTML = customers.map(c=>`
+        <tr>
+            <td><div class="d-flex align-items-center gap-2">
+                <div class="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center" style="width:36px;height:36px;">
+                    <span class="text-primary fw-bold" style="font-size:0.8rem;">${(c.firstName||c.email||'?')[0].toUpperCase()}</span>
+                </div>
+                <span class="fw-semibold">${escHtml((c.firstName||'')+' '+(c.lastName||'')).trim()||'—'}</span>
+            </div></td>
+            <td>${escHtml(c.email||'')}</td>
+            <td>${c.createdAt ? new Date(c.createdAt).toLocaleDateString() : '—'}</td>
+            <td>${c.orderCount ?? '—'}</td>
+            <td>${c.totalSpent != null ? '$'+c.totalSpent.toFixed(2) : '—'}</td>
+        </tr>`).join('');
+}
+
+document.getElementById('searchInput').addEventListener('input', function(){
+    const q = this.value.toLowerCase();
+    renderCustomers(q ? allCustomers.filter(c=>(c.email||'').toLowerCase().includes(q)||(c.firstName||'').toLowerCase().includes(q)) : allCustomers);
+});
+function clearSearch(){ document.getElementById('searchInput').value=''; renderCustomers(allCustomers); }
+function showTableMsg(id, cols, msg){ document.querySelector(`#${id} tbody`).innerHTML=`<tr><td colspan="${cols}" class="text-center py-4 text-muted">${msg}</td></tr>`; }
+function escHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
+function getCookie(n){const v=`; ${document.cookie}`,p=v.split(`; ${n}=`);if(p.length===2)return p.pop().split(';').shift();return null;}
+document.addEventListener('DOMContentLoaded', loadCustomers);
+</script>
+}

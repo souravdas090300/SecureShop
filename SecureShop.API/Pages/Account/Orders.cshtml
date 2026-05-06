@@ -73,8 +73,8 @@
                                                         <tr>
                                                             <td>@item.ProductName</td>
                                                             <td class="text-center">@item.Quantity</td>
-                                                            <td class="text-end">$@item.Price.ToString("F2")</td>
-                                                            <td class="text-end">$@((item.Quantity * item.Price).ToString("F2"))</td>
+                                                            <td class="text-end">$@item.UnitPrice.ToString("F2")</td>
+                                                            <td class="text-end">$@((item.Quantity * item.UnitPrice).ToString("F2"))</td>
                                                         </tr>
                                                     }
                                                 </tbody>

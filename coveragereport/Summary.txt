@@ -1,0 +1,127 @@
+Summary
+  Generated on: 05/05/2026 - 07:17:20
+  Coverage date: 05/05/2026 - 07:17:02
+  Parser: Cobertura
+  Assemblies: 4
+  Classes: 99
+  Files: 91
+  Line coverage: 40.7%
+  Covered lines: 1793
+  Uncovered lines: 2608
+  Coverable lines: 4401
+  Total lines: 11059
+  Branch coverage: 46.3% (356 of 768)
+  Covered branches: 356
+  Total branches: 768
+  Method coverage: 85.4% (299 of 350)
+  Full method coverage: 83.4% (292 of 350)
+  Covered methods: 299
+  Fully covered methods: 292
+  Total methods: 350
+
+SecureShop.API                                                            68.4%
+  Program                                                                    0%
+  SecureShop.API.Controllers.AuthController                                100%
+  SecureShop.API.Controllers.OrdersController                              100%
+  SecureShop.API.Controllers.ProductsController                           95.5%
+  SecureShop.API.Middleware.CacheBustingMiddleware                         100%
+  SecureShop.API.Middleware.GlobalExceptionMiddleware                      100%
+  SecureShop.API.Middleware.SecurityHeadersMiddleware                      100%
+  SecureShop.API.Pages.AboutModel                                          100%
+  SecureShop.API.Pages.Account.AuthTestModel                               100%
+  SecureShop.API.Pages.Account.GoogleCallbackModel                         100%
+  SecureShop.API.Pages.Account.LoginModel                                 89.7%
+  SecureShop.API.Pages.Account.LogoutModel                                 100%
+  SecureShop.API.Pages.Account.MakeAdminModel                              100%
+  SecureShop.API.Pages.Account.OrderDto                                    100%
+  SecureShop.API.Pages.Account.OrderItemDto                                100%
+  SecureShop.API.Pages.Account.OrdersModel                                 100%
+  SecureShop.API.Pages.Account.Pages_Account_AuthTest                        0%
+  SecureShop.API.Pages.Account.Pages_Account_GoogleCallback                  0%
+  SecureShop.API.Pages.Account.Pages_Account_Login                           0%
+  SecureShop.API.Pages.Account.Pages_Account_Logout                          0%
+  SecureShop.API.Pages.Account.Pages_Account_MakeAdmin                       0%
+  SecureShop.API.Pages.Account.Pages_Account_Orders                          0%
+  SecureShop.API.Pages.Account.Pages_Account_Profile                         0%
+  SecureShop.API.Pages.Account.Pages_Account_Register                        0%
+  SecureShop.API.Pages.Account.ProfileModel                               98.3%
+  SecureShop.API.Pages.Account.RegisterModel                              95.3%
+  SecureShop.API.Pages.Admin.AdminIndexModel                               100%
+  SecureShop.API.Pages.Admin.AdminLoginModel                               100%
+  SecureShop.API.Pages.Admin.AdminLogoutModel                              100%
+  SecureShop.API.Pages.Admin.AdminPageModel                                100%
+  SecureShop.API.Pages.Admin.Customers.AdminCustomersModel                 100%
+  SecureShop.API.Pages.Admin.Customers.Pages_Admin_Customers_Index           0%
+  SecureShop.API.Pages.Admin.Orders.AdminOrderDetailsModel                 100%
+  SecureShop.API.Pages.Admin.Orders.AdminOrdersModel                       100%
+  SecureShop.API.Pages.Admin.Orders.Pages_Admin_Orders_Details               0%
+  SecureShop.API.Pages.Admin.Orders.Pages_Admin_Orders_Index                 0%
+  SecureShop.API.Pages.Admin.Pages_Admin__ViewStart                          0%
+  SecureShop.API.Pages.Admin.Pages_Admin_Index                               0%
+  SecureShop.API.Pages.Admin.Pages_Admin_Login                               0%
+  SecureShop.API.Pages.Admin.Products.AdminProductCreateModel              100%
+  SecureShop.API.Pages.Admin.Products.AdminProductEditModel                100%
+  SecureShop.API.Pages.Admin.Products.AdminProductsModel                   100%
+  SecureShop.API.Pages.Admin.Products.Pages_Admin_Products_Create            0%
+  SecureShop.API.Pages.Admin.Products.Pages_Admin_Products_Edit              0%
+  SecureShop.API.Pages.Admin.Products.Pages_Admin_Products_Index             0%
+  SecureShop.API.Pages.Admin.Reports.AdminReportsModel                     100%
+  SecureShop.API.Pages.Admin.Reports.Pages_Admin_Reports_Index               0%
+  SecureShop.API.Pages.Admin.Shared.Pages_Admin_Shared__AdminLayout          0%
+  SecureShop.API.Pages.AuthTestModel                                       100%
+  SecureShop.API.Pages.CartModel                                           100%
+  SecureShop.API.Pages.CheckoutModel                                      98.9%
+  SecureShop.API.Pages.ContactModel                                       82.7%
+  SecureShop.API.Pages.IndexModel                                          100%
+  SecureShop.API.Pages.Pages__ViewStart                                      0%
+  SecureShop.API.Pages.Pages_About                                           0%
+  SecureShop.API.Pages.Pages_AuthTest                                        0%
+  SecureShop.API.Pages.Pages_Cart                                            0%
+  SecureShop.API.Pages.Pages_Checkout                                        0%
+  SecureShop.API.Pages.Pages_Contact                                         0%
+  SecureShop.API.Pages.Pages_Index                                           0%
+  SecureShop.API.Pages.Pages_Products                                        0%
+  SecureShop.API.Pages.ProductsModel                                       100%
+  SecureShop.API.Pages.Shared.Pages_Shared__Layout                           0%
+
+SecureShop.Application                                                     100%
+  SecureShop.Application.DependencyInjection                               100%
+  SecureShop.Application.DTOs.Auth.AuthResponseDto                         100%
+  SecureShop.Application.DTOs.Auth.GoogleSignInDto                         100%
+  SecureShop.Application.DTOs.Auth.LoginDto                                100%
+  SecureShop.Application.DTOs.Auth.RegisterDto                             100%
+  SecureShop.Application.DTOs.Orders.CreateOrderDto                        100%
+  SecureShop.Application.DTOs.Orders.OrderItemDto                          100%
+  SecureShop.Application.DTOs.Orders.OrderItemResponseDto                  100%
+  SecureShop.Application.DTOs.Orders.OrderResponseDto                      100%
+  SecureShop.Application.DTOs.Orders.UpdateOrderStatusDto                  100%
+  SecureShop.Application.DTOs.Products.CreateProductDto                    100%
+  SecureShop.Application.DTOs.Products.PagedProductsDto                    100%
+  SecureShop.Application.DTOs.Products.ProductResponseDto                  100%
+  SecureShop.Application.DTOs.Products.UpdateProductDto                    100%
+  SecureShop.Application.Services.OrderService                             100%
+  SecureShop.Application.Services.ProductService                           100%
+  SecureShop.Application.Validators.CreateProductValidator                 100%
+  SecureShop.Application.Validators.RegisterValidator                      100%
+
+SecureShop.Domain                                                         99.1%
+  SecureShop.Domain.Entities.ApplicationUser                               100%
+  SecureShop.Domain.Entities.Order                                         100%
+  SecureShop.Domain.Entities.OrderItem                                    93.7%
+  SecureShop.Domain.Entities.Product                                       100%
+  SecureShop.Domain.Exceptions.DomainException                             100%
+
+SecureShop.Infrastructure                                                  8.5%
+  SecureShop.Infrastructure.AppDbContext                                  96.7%
+  SecureShop.Infrastructure.AppDbContextFactory                              0%
+  SecureShop.Infrastructure.DependencyInjection                              0%
+  SecureShop.Infrastructure.Migrations.AddProductImageUrl                    0%
+  SecureShop.Infrastructure.Migrations.AppDbContextModelSnapshot             0%
+  SecureShop.Infrastructure.Migrations.InitialCreate                         0%
+  SecureShop.Infrastructure.Migrations.OptionalOrderItemProductRelation      0%
+  SecureShop.Infrastructure.OrderRepository                                100%
+  SecureShop.Infrastructure.ProductRepository                              100%
+  SecureShop.Infrastructure.Services.AuthService                          78.8%
+  SecureShop.Infrastructure.Services.CacheService                          100%
+  SecureShop.Infrastructure.Services.NullCacheService                      100%
+  SecureShop.Infrastructure.Services.PaymentService                          0%

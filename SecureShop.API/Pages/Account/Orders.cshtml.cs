@@ -5,6 +5,11 @@ using System.Text.Json;
 
 namespace SecureShop.API.Pages.Account;
 
+/// <summary>
+/// Page model for the authenticated user's order history page.
+/// Requires authentication. Calls the internal Orders API (<c>/api/orders/my</c>)
+/// with the user's JWT (read from the <c>AuthToken</c> cookie) to fetch all past orders.
+/// </summary>
 [Authorize]
 public class OrdersModel : PageModel
 {
@@ -37,11 +42,14 @@ public class OrdersModel : PageModel
             }
 
             var client = _httpClientFactory.CreateClient();
-            var apiBaseUrl = _configuration["ApiBaseUrl"] ?? "http://localhost:8080";
+
+            // Use Request.Scheme + Host so it works both locally and on Render
+            // without needing an ApiBaseUrl config value.
+            var baseUrl = $"{Request.Scheme}://{Request.Host}";
             
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-            var response = await client.GetAsync($"{apiBaseUrl}/api/orders");
+            var response = await client.GetAsync($"{baseUrl}/api/orders/my");
             
             if (response.IsSuccessStatusCode)
             {
@@ -70,7 +78,7 @@ public class OrdersModel : PageModel
 
 public class OrderDto
 {
-    public int Id { get; set; }
+    public Guid Id { get; set; }
     public DateTime CreatedAt { get; set; }
     public decimal TotalAmount { get; set; }
     public string Status { get; set; } = string.Empty;
@@ -81,5 +89,5 @@ public class OrderItemDto
 {
     public string ProductName { get; set; } = string.Empty;
     public int Quantity { get; set; }
-    public decimal Price { get; set; }
+    public decimal UnitPrice { get; set; }
 }

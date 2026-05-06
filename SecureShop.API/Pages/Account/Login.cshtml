@@ -31,9 +31,7 @@
 
                     <!-- Google Sign In -->
                     <div class="d-grid mb-3">
-                        <button type="button" class="btn btn-outline-danger btn-lg" onclick="signInWithGoogle()">
-                            <i class="fab fa-google me-2"></i> Sign in with Google
-                        </button>
+                        <div id="googleSignInButton"></div>
                     </div>
 
                     <div class="text-center my-3">
@@ -107,63 +105,81 @@
         const googleClientId = '@Model.GoogleClientId';
         const googleConfigured = googleClientId && !googleClientId.startsWith('YOUR_');
 
-        // Initialize Google Sign-In
-        window.onload = function() {
+        console.log('[Google] Script loaded, Client ID configured:', googleConfigured);
+
+        // Initialize Google Sign-In when the library loads
+        function initializeGoogleSignIn() {
             if (!googleConfigured) {
-                console.warn('GoogleAuth:ClientId is not configured.');
+                console.log('[Google] Not configured, hiding button');
+                const buttonDiv = document.getElementById('googleSignInButton');
+                if (buttonDiv) buttonDiv.style.display = 'none';
                 return;
             }
-
-            // Initialize Google Identity Services
-            if (typeof google !== 'undefined') {
-                google.accounts.id.initialize({
-                    client_id: googleClientId,
-                    callback: handleCredentialResponse
-                });
-            }
-        };
-
-        function signInWithGoogle() {
-            if (!googleConfigured) {
-                alert('Google Sign-In is not configured yet. Please use email sign-in or set GoogleAuth:ClientId.');
-                return;
-            }
-
-            // Trigger Google One Tap or the button flow
-            if (typeof google !== 'undefined') {
-                google.accounts.id.prompt(); // Show One Tap dialog
+            
+            if (typeof google !== 'undefined' && google.accounts) {
+                console.log('[Google] Initializing with client ID:', googleClientId.substring(0, 20) + '...');
+                try {
+                    google.accounts.id.initialize({
+                        client_id: googleClientId,
+                        callback: handleCredentialResponse,
+                        auto_select: false,
+                        cancel_on_tap_outside: true
+                    });
+                    
+                    // Render the Google Sign-In button
+                    google.accounts.id.renderButton(
+                        document.getElementById('googleSignInButton'),
+                        { 
+                            theme: 'outline',
+                            size: 'large',
+                            width: '100%',
+                            text: 'signin_with',
+                            shape: 'rectangular'
+                        }
+                    );
+                    
+                    console.log('[Google] Button rendered successfully');
+                } catch (error) {
+                    console.error('[Google] Initialization error:', error);
+                }
             } else {
-                alert('Google Sign-In is not loaded yet. Please try again.');
+                console.log('[Google] Library not loaded yet, retrying...');
+                setTimeout(initializeGoogleSignIn, 500);
             }
         }
 
-        // Handle Google Sign-In callback
+        // Try initialization when page loads
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeGoogleSignIn);
+        } else {
+            initializeGoogleSignIn();
+        }
+
+        // Handle the credential response from Google
         async function handleCredentialResponse(response) {
             try {
-                // Send the Google ID token to your backend
+                console.log('[Google] Received credential, calling API...');
+                
+                // Call our API to exchange Google token for our JWT token
                 const result = await fetch('/api/auth/google-signin', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ idToken: response.credential })
                 });
 
                 const data = await result.json();
+                console.log('[Google] API response:', result.status);
 
                 if (result.ok && data.token) {
-                    // Store authentication data
-                    document.cookie = `AuthToken=${data.token}; path=/; max-age=28800`; // 8 hours
-                    document.cookie = `UserEmail=${data.email}; path=/; max-age=28800`;
-                    document.cookie = `UserName=${data.name}; path=/; max-age=28800`;
-                    
-                    // Redirect to home page
-                    window.location.href = '/';
+                    console.log('[Google] Token received, redirecting to callback...');
+                    // Redirect to callback page to establish server-side session
+                    window.location.href = '/account/googlecallback?token=' + encodeURIComponent(data.token);
                 } else {
+                    console.error('[Google] API error:', data);
                     alert(data.message || 'Google sign-in failed. Please try again.');
                 }
             } catch (error) {
-                console.error('Error:', error);
+                console.error('[Google] Exception:', error);
                 alert('An error occurred during Google sign-in. Please try again.');
             }
         }

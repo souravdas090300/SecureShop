@@ -187,6 +187,12 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
+                <form class="d-flex mx-auto my-2 my-lg-0" action="/products" method="get" style="width: 320px;">
+                    <div class="input-group">
+                        <input class="form-control" type="search" name="search" placeholder="Search products..." aria-label="Search" value="@(ViewContext.HttpContext.Request.Query["search"].ToString())">
+                        <button class="btn btn-outline-secondary" type="submit"><i class="fas fa-search"></i></button>
+                    </div>
+                </form>
                 <ul class="navbar-nav ms-auto">
                     <li class="nav-item">
                         <a class="nav-link" href="/">Home</a>
@@ -206,26 +212,42 @@
                             <span class="cart-badge" id="cartCount">0</span>
                         </a>
                     </li>
-                    <li class="nav-item" id="userAccountNav" style="display: none;">
-                        <div class="dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                                <i class="fas fa-user-circle"></i> <span id="userNameDisplay"></span>
+                    @{
+                        var isAuth = User.Identity?.IsAuthenticated == true;
+                        var userName = User.Identity?.Name;
+                        Console.WriteLine($"[Layout] User.Identity.IsAuthenticated: {isAuth}");
+                        Console.WriteLine($"[Layout] User.Identity.Name: {userName}");
+                        Console.WriteLine($"[Layout] Claims count: {User.Claims?.Count()}");
+                    }
+                    @if (User.Identity?.IsAuthenticated == true)
+                    {
+                        <li class="nav-item">
+                            <div class="dropdown">
+                                <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                                    <i class="fas fa-user-circle"></i> @User.Identity.Name
+                                </a>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li><a class="dropdown-item" href="/account/profile"><i class="fas fa-user"></i> My Profile</a></li>
+                                    <li><a class="dropdown-item" href="/account/orders"><i class="fas fa-box"></i> My Orders</a></li>
+                                    @if (User.IsInRole("Admin"))
+                                    {
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><a class="dropdown-item text-primary fw-bold" href="/admin"><i class="fas fa-shield-alt"></i> Admin Dashboard</a></li>
+                                    }
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="/account/logout"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+                                </ul>
+                            </div>
+                        </li>
+                    }
+                    else
+                    {
+                        <li class="nav-item">
+                            <a class="nav-link" href="/account/login">
+                                <i class="fas fa-user"></i> Login
                             </a>
-                            <ul class="dropdown-menu dropdown-menu-end">
-                                <li><a class="dropdown-item" href="/account/profile"><i class="fas fa-user"></i> My Profile</a></li>
-                                <li><a class="dropdown-item" href="/account/orders"><i class="fas fa-box"></i> My Orders</a></li>
-                                <li id="adminLinkNav" style="display: none;"><hr class="dropdown-divider"></li>
-                                <li id="adminLinkItem" style="display: none;"><a class="dropdown-item text-primary fw-bold" href="/admin"><i class="fas fa-shield-alt"></i> Admin Dashboard</a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="#" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
-                            </ul>
-                        </div>
-                    </li>
-                    <li class="nav-item" id="loginNav">
-                        <a class="nav-link" href="/account/login">
-                            <i class="fas fa-user"></i> Login
-                        </a>
-                    </li>
+                        </li>
+                    }
                 </ul>
             </div>
         </div>
@@ -284,82 +306,8 @@
             document.getElementById('cartCount').textContent = cart.length;
         }
         
-        // Check if user is logged in
-        function checkLoginState() {
-            // Check for auth cookie
-            const authToken = getCookie('AuthToken');
-            const userName = getCookie('UserName');
-            
-            if (authToken && userName) {
-                // User is logged in
-                document.getElementById('userAccountNav').style.display = 'block';
-                document.getElementById('loginNav').style.display = 'none';
-                document.getElementById('userNameDisplay').textContent = userName;
-                
-                // Check if user is admin by decoding JWT token
-                try {
-                    const tokenPayload = parseJwt(authToken);
-                    const roles = tokenPayload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'];
-                    
-                    // roles can be a string (single role) or array (multiple roles)
-                    const isAdmin = Array.isArray(roles) 
-                        ? roles.includes('Admin') 
-                        : roles === 'Admin';
-                    
-                    if (isAdmin) {
-                        document.getElementById('adminLinkNav').style.display = 'block';
-                        document.getElementById('adminLinkItem').style.display = 'block';
-                    }
-                } catch (error) {
-                    console.log('Could not parse token for role check');
-                }
-            } else {
-                // User is not logged in
-                document.getElementById('userAccountNav').style.display = 'none';
-                document.getElementById('loginNav').style.display = 'block';
-            }
-        }
-        
-        // Parse JWT token
-        function parseJwt(token) {
-            try {
-                const base64Url = token.split('.')[1];
-                const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-                const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-                }).join(''));
-                return JSON.parse(jsonPayload);
-            } catch (error) {
-                console.error('Error parsing JWT:', error);
-                return {};
-            }
-        }
-        
-        // Get cookie by name
-        function getCookie(name) {
-            const value = `; ${document.cookie}`;
-            const parts = value.split(`; ${name}=`);
-            if (parts.length === 2) return parts.pop().split(';').shift();
-            return null;
-        }
-        
-        // Logout function
-        function logout() {
-            // Clear auth cookies
-            document.cookie = 'AuthToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-            document.cookie = 'UserEmail=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-            document.cookie = 'UserName=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-            
-            // Clear cart
-            localStorage.removeItem('cart');
-            
-            // Redirect to home
-            window.location.href = '/';
-        }
-        
         // Initialize on page load
         updateCartBadge();
-        checkLoginState();
     </script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>

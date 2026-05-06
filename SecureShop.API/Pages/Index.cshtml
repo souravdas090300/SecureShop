@@ -4,6 +4,15 @@
     ViewData["Title"] = "Home";
 }
 
+<!-- Success Message (from TempData after registration/login) -->
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show mx-auto mt-3" role="alert" style="max-width: 800px;">
+        <i class="fas fa-check-circle"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
 <!-- Hero Section -->
 <section class="hero-section">
     <div class="container text-center">
@@ -59,7 +68,17 @@
                 <div class="col-md-4 col-lg-3">
                     <div class="product-card">
                         <div class="product-image">
-                            <i class="fas fa-box"></i>
+                            @if (!string.IsNullOrEmpty(product.ImageUrl))
+                            {
+                                <img src="@product.ImageUrl" alt="@product.Name"
+                                     style="width:100%;height:100%;object-fit:cover;"
+                                     onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+                                <i class="fas fa-box" style="display:none;"></i>
+                            }
+                            else
+                            {
+                                <i class="fas fa-box"></i>
+                            }
                         </div>
                         <div class="product-info">
                             <span class="category-badge">@product.Category</span>

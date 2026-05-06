@@ -1,0 +1,92 @@
+@page
+@model SecureShop.API.Pages.Admin.AdminLoginModel
+@{
+    Layout = null;
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Login - SecureShop</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .admin-login-card {
+            max-width: 450px;
+            width: 100%;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        .admin-header {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 15px 15px 0 0;
+            text-align: center;
+        }
+        .admin-body {
+            padding: 40px;
+        }
+        .admin-logo {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="admin-login-card">
+        <div class="admin-header">
+            <div class="admin-logo">
+                <i class="fas fa-shield-alt"></i>
+            </div>
+            <h3 class="mb-0">Admin Portal</h3>
+            <p class="mb-0 mt-2" style="opacity: 0.9;">SecureShop Administration</p>
+        </div>
+        <div class="admin-body">
+            @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+            {
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle"></i> @Model.ErrorMessage
+                </div>
+            }
+
+            <form method="post">
+                <div class="mb-3">
+                    <label class="form-label"><i class="fas fa-envelope"></i> Admin Email</label>
+                    <input type="email" class="form-control form-control-lg" asp-for="Email" 
+                           placeholder="admin@secureshop.com" required />
+                </div>
+                <div class="mb-4">
+                    <label class="form-label"><i class="fas fa-lock"></i> Password</label>
+                    <input type="password" class="form-control form-control-lg" asp-for="Password" 
+                           placeholder="Enter admin password" required />
+                </div>
+                <button type="submit" class="btn btn-danger btn-lg w-100">
+                    <i class="fas fa-sign-in-alt"></i> Login to Admin Panel
+                </button>
+            </form>
+
+            <hr class="my-4" />
+            
+            <div class="text-center">
+                <a href="/account/makeadmin" class="btn btn-outline-secondary btn-sm mb-3 w-100">
+                    <i class="fas fa-user-plus"></i> Create New Admin User
+                </a>
+                <a href="/" class="text-muted text-decoration-none d-block">
+                    <i class="fas fa-arrow-left"></i> Back to Public Site
+                </a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

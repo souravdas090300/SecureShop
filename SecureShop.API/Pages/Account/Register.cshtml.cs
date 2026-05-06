@@ -3,17 +3,22 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using System.ComponentModel.DataAnnotations;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using SecureShop.API.Helpers;
 
 namespace SecureShop.API.Pages.Account;
 
+/// <summary>
+/// Page model for the new user registration page.
+/// Submits the registration form to the internal Auth API and sets an auth cookie
+/// on success so the user is immediately logged in after registering.
+/// </summary>
 public class RegisterModel : PageModel
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
+    private readonly ILogger<RegisterModel> _logger;
 
     [BindProperty]
     [Required(ErrorMessage = "First name is required")]
@@ -34,7 +39,7 @@ public class RegisterModel : PageModel
     [Required(ErrorMessage = "Password is required")]
     [StringLength(100, MinimumLength = 8, ErrorMessage = "Password must be at least 8 characters long")]
     [DataType(DataType.Password)]
-    [RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$", 
+    [RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$",
         ErrorMessage = "Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character")]
     public string Password { get; set; } = string.Empty;
 
@@ -47,10 +52,11 @@ public class RegisterModel : PageModel
     public string? ErrorMessage { get; set; }
     public string GoogleClientId => _configuration["GoogleAuth:ClientId"] ?? "";
 
-    public RegisterModel(IHttpClientFactory httpClientFactory, IConfiguration configuration)
+    public RegisterModel(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<RegisterModel> logger)
     {
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
+        _logger = logger;
     }
 
     public void OnGet()
@@ -59,26 +65,14 @@ public class RegisterModel : PageModel
 
     public async Task<IActionResult> OnPostAsync()
     {
-        Console.WriteLine($"[Register Page] OnPostAsync called - Email: '{Email}', FirstName: '{FirstName}', LastName: '{LastName}', Password Length: {Password?.Length ?? 0}");
-        
         if (!ModelState.IsValid)
         {
-            Console.WriteLine($"[Register Page] ModelState is INVALID");
-            var errors = new List<string>();
-            foreach (var error in ModelState)
-            {
-                var errorMessages = string.Join(", ", error.Value?.Errors.Select(e => e.ErrorMessage) ?? Array.Empty<string>());
-                if (!string.IsNullOrEmpty(errorMessages))
-                {
-                    Console.WriteLine($"  - {error.Key}: {errorMessages}");
-                    errors.Add($"{error.Key}: {errorMessages}");
-                }
-            }
-            ErrorMessage = "Please fix the following errors: " + string.Join("; ", errors);
+            ErrorMessage = "Please fix the following errors: " +
+                string.Join("; ", ModelState.Values
+                    .SelectMany(v => v.Errors)
+                    .Select(e => e.ErrorMessage));
             return Page();
         }
-
-        Console.WriteLine($"[Register Page] ModelState is valid, calling registration API");
 
         try
         {
@@ -101,14 +95,14 @@ public class RegisterModel : PageModel
             if (response.IsSuccessStatusCode)
             {
                 var responseJson = await response.Content.ReadAsStringAsync();
-                var result = JsonSerializer.Deserialize<AuthResponse>(responseJson, new JsonSerializerOptions 
-                { 
-                    PropertyNameCaseInsensitive = true 
+                var result = JsonSerializer.Deserialize<AuthResponse>(responseJson, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
                 });
 
                 if (result?.Token != null)
                 {
-                    // Auto-login after successful registration
+                    // Store raw JWT for API calls made by other page models.
                     var cookieOptions = new CookieOptions
                     {
                         HttpOnly = true,
@@ -117,63 +111,75 @@ public class RegisterModel : PageModel
                         Expires = DateTimeOffset.UtcNow.AddHours(8)
                     };
                     Response.Cookies.Append("AuthToken", result.Token, cookieOptions);
-                    Response.Cookies.Append("UserEmail", result.Email ?? "", cookieOptions);
-                    Response.Cookies.Append("UserName", result.FirstName ?? "", cookieOptions);
 
-                    // Decode JWT token to get claims
-                    var handler = new JwtSecurityTokenHandler();
-                    var jwtToken = handler.ReadJwtToken(result.Token);
-                    
-                    // Create claims identity from JWT
-                    var claims = jwtToken.Claims.ToList();
-                    var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-                    var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
+                    // Build cookie identity with standard ClaimTypes.
+                    var principal = JwtCookieHelper.BuildPrincipal(
+                        result.Token,
+                        overrideEmail:     result.Email     ?? Email,
+                        overrideFirstName: result.FirstName ?? FirstName,
+                        overrideLastName:  result.LastName  ?? LastName);
 
-                    // Sign in the user with Cookie Authentication
                     await HttpContext.SignInAsync(
                         CookieAuthenticationDefaults.AuthenticationScheme,
-                        claimsPrincipal,
+                        principal,
                         new AuthenticationProperties
                         {
-                            IsPersistent = false,
-                            ExpiresUtc = DateTimeOffset.UtcNow.AddHours(8)
+                            IsPersistent = true,
+                            ExpiresUtc = DateTimeOffset.UtcNow.AddHours(8),
+                            AllowRefresh = true
                         });
 
-                    TempData["SuccessMessage"] = "Registration successful! Welcome to SecureShop.";
-                    return RedirectToPage("/Index");
+                    _logger.LogInformation("Registration and auto-login successful for {Email}", Email);
+                    TempData["SuccessMessage"] = $"Welcome {result.FirstName ?? FirstName}! Your account has been created successfully.";
+                    return Redirect("/");
                 }
+
+                // Registered but no token — shouldn't happen; send to login as fallback.
+                TempData["SuccessMessage"] = "Registration successful! Please sign in with your new account.";
+                return RedirectToPage("/Account/Login");
             }
             else if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
             {
                 var errorJson = await response.Content.ReadAsStringAsync();
                 try
                 {
-                    var errorResponse = JsonSerializer.Deserialize<ErrorResponse>(errorJson, new JsonSerializerOptions 
-                    { 
-                        PropertyNameCaseInsensitive = true 
+                    var errorResponse = JsonSerializer.Deserialize<ErrorResponse>(errorJson, new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
                     });
                     ErrorMessage = errorResponse?.Message ?? "Registration failed. Please check your information.";
                 }
-                catch
+                catch (JsonException)
                 {
                     ErrorMessage = "This email is already registered. Please use a different email or try logging in.";
                 }
             }
             else
             {
+                _logger.LogWarning("Registration API returned {StatusCode} for {Email}", response.StatusCode, Email);
                 ErrorMessage = "An error occurred during registration. Please try again later.";
             }
         }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "HTTP error during registration for {Email}", Email);
+            ErrorMessage = "Unable to connect to the authentication server. Please check your connection.";
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "JSON parse error during registration for {Email}", Email);
+            ErrorMessage = "Received invalid response from server. Please try again.";
+        }
         catch (Exception ex)
         {
-            ErrorMessage = "Unable to connect to the server. Please try again later.";
-            Console.WriteLine($"Registration error: {ex.Message}");
+            _logger.LogError(ex, "Unexpected error during registration for {Email}", Email);
+            ErrorMessage = "An unexpected error occurred. Please try again.";
         }
 
         return Page();
     }
 
-    private class AuthResponse
+    private sealed class AuthResponse
     {
         public string? Token { get; set; }
         public string? Email { get; set; }
@@ -181,7 +187,7 @@ public class RegisterModel : PageModel
         public string? LastName { get; set; }
     }
 
-    private class ErrorResponse
+    private sealed class ErrorResponse
     {
         public string? Message { get; set; }
     }

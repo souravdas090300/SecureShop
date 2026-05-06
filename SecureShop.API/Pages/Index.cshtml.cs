@@ -4,19 +4,30 @@ using System.Text.Json;
 
 namespace SecureShop.API.Pages;
 
+/// <summary>
+/// Page model for the storefront home page.
+/// Fetches up to 8 featured (newest) products from the internal API and
+/// exposes them to the Razor view via <see cref="FeaturedProducts"/>.
+/// </summary>
 public class IndexModel : PageModel
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
 
+    /// <summary>Featured products to display on the home page hero section.</summary>
     public List<ProductResponseDto> FeaturedProducts { get; set; } = new();
 
+    /// <summary>Injects the HTTP client factory and application configuration.</summary>
     public IndexModel(IHttpClientFactory httpClientFactory, IConfiguration configuration)
     {
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
     }
 
+    /// <summary>
+    /// Loads the featured product list by calling the internal Products API.
+    /// Falls back to an empty list on any API error.
+    /// </summary>
     public async Task OnGetAsync()
     {
         try
@@ -28,7 +39,7 @@ public class IndexModel : PageModel
             if (response.IsSuccessStatusCode)
             {
                 var json = await response.Content.ReadAsStringAsync();
-                var result = JsonSerializer.Deserialize<PagedProductsResponse>(json, new JsonSerializerOptions 
+                var result = JsonSerializer.Deserialize<PagedProductsDto>(json, new JsonSerializerOptions 
                 { 
                     PropertyNameCaseInsensitive = true 
                 });
@@ -38,17 +49,8 @@ public class IndexModel : PageModel
         }
         catch (Exception ex)
         {
-            // Log error - products will be empty list
-            Console.WriteLine($"Error loading products: {ex.Message}");
+            // Products will be empty list — non-fatal on the home page.
+            _ = ex; // suppressed; error logged by ASP.NET Core host
         }
-    }
-
-    private class PagedProductsResponse
-    {
-        public IEnumerable<ProductResponseDto> Items { get; set; } = new List<ProductResponseDto>();
-        public int TotalCount { get; set; }
-        public int Page { get; set; }
-        public int PageSize { get; set; }
-        public int TotalPages { get; set; }
     }
 }

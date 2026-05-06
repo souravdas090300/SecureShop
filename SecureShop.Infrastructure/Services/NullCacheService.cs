@@ -19,4 +19,7 @@ public class NullCacheService : ICacheService
 
     public Task RemoveAsync(string key) =>
         Task.CompletedTask;
+
+    public Task RemoveByPrefixAsync(string prefix) =>
+        Task.CompletedTask;
 }

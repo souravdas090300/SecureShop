@@ -1,4 +1,5 @@
 ﻿using SecureShop.Domain.Entities;
+using SecureShop.Domain.Enums;
 using SecureShop.Domain.Exceptions;
 
 namespace SecureShop.UnitTests;

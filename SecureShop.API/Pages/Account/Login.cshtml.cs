@@ -3,17 +3,23 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using System.ComponentModel.DataAnnotations;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using SecureShop.API.Helpers;
 
 namespace SecureShop.API.Pages.Account;
 
+/// <summary>
+/// Page model for the customer login page.
+/// Submits credentials to the internal Auth API, receives a JWT, and converts
+/// it into an ASP.NET Core cookie identity so Razor Pages can use <c>[Authorize]</c>.
+/// Also exposes the Google Client ID needed by the Google Sign-In button.
+/// </summary>
 public class LoginModel : PageModel
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
+    private readonly ILogger<LoginModel> _logger;
 
     [BindProperty]
     [Required(ErrorMessage = "Email is required")]
@@ -30,116 +36,123 @@ public class LoginModel : PageModel
 
     public string? ErrorMessage { get; set; }
     public string? SuccessMessage { get; set; }
+    /// <summary>The Google OAuth client ID, injected from configuration for the front-end Sign-In button.</summary>
     public string GoogleClientId => _configuration["GoogleAuth:ClientId"] ?? "";
 
-    public LoginModel(IHttpClientFactory httpClientFactory, IConfiguration configuration)
+    /// <summary>Injects the HTTP client factory, application configuration, and structured logger.</summary>
+    public LoginModel(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<LoginModel> logger)
     {
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
+        _logger = logger;
     }
 
     public void OnGet(string? returnUrl = null)
     {
-        // Check if user just registered
         if (TempData["SuccessMessage"] != null)
-        {
             SuccessMessage = TempData["SuccessMessage"]?.ToString();
-        }
     }
 
     public async Task<IActionResult> OnPostAsync(string? returnUrl = null)
     {
         returnUrl ??= "/";
-        
-        Console.WriteLine($"[Login Page] OnPostAsync called - Email: '{Email}'");
 
         if (!ModelState.IsValid)
-        {
-            Console.WriteLine($"[Login Page] ModelState is INVALID");
             return Page();
-        }
-        
-        Console.WriteLine($"[Login Page] ModelState is valid, calling login API");
 
         try
         {
             var client = _httpClientFactory.CreateClient();
             var baseUrl = $"{Request.Scheme}://{Request.Host}";
 
-            var loginData = new
-            {
-                email = Email,
-                password = Password
-            };
-
+            var loginData = new { email = Email, password = Password };
             var json = JsonSerializer.Serialize(loginData);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
             var response = await client.PostAsync($"{baseUrl}/api/auth/login", content);
+            var responseBody = await response.Content.ReadAsStringAsync();
 
             if (response.IsSuccessStatusCode)
             {
-                var responseJson = await response.Content.ReadAsStringAsync();
-                var result = JsonSerializer.Deserialize<AuthResponse>(responseJson, new JsonSerializerOptions 
-                { 
-                    PropertyNameCaseInsensitive = true 
+                var result = JsonSerializer.Deserialize<AuthResponse>(responseBody, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
                 });
 
                 if (result?.Token != null)
                 {
-                    // Store token in cookie
+                    // Store raw JWT in a cookie so other page models (e.g. OrdersModel)
+                    // can attach it as a Bearer token when calling the internal API.
                     var cookieOptions = new CookieOptions
                     {
                         HttpOnly = true,
                         Secure = Request.IsHttps,
                         SameSite = SameSiteMode.Lax,
-                        Expires = RememberMe ? DateTimeOffset.UtcNow.AddDays(30) : DateTimeOffset.UtcNow.AddHours(8)
+                        Expires = RememberMe
+                            ? DateTimeOffset.UtcNow.AddDays(30)
+                            : DateTimeOffset.UtcNow.AddHours(8)
                     };
                     Response.Cookies.Append("AuthToken", result.Token, cookieOptions);
-                    Response.Cookies.Append("UserEmail", result.Email ?? "", cookieOptions);
-                    Response.Cookies.Append("UserName", result.FirstName ?? "", cookieOptions);
 
-                    // Decode JWT token to get claims
-                    var handler = new JwtSecurityTokenHandler();
-                    var jwtToken = handler.ReadJwtToken(result.Token);
-                    
-                    // Create claims identity from JWT
-                    var claims = jwtToken.Claims.ToList();
-                    var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-                    var claimsPrincipal = new ClaimsPrincipal(claimsIdentity);
+                    // Build a cookie identity with standard ClaimTypes from the JWT.
+                    var principal = JwtCookieHelper.BuildPrincipal(
+                        result.Token,
+                        overrideEmail:     result.Email,
+                        overrideFirstName: result.FirstName,
+                        overrideLastName:  result.LastName);
 
-                    // Sign in the user with Cookie Authentication
                     await HttpContext.SignInAsync(
                         CookieAuthenticationDefaults.AuthenticationScheme,
-                        claimsPrincipal,
+                        principal,
                         new AuthenticationProperties
                         {
-                            IsPersistent = RememberMe,
-                            ExpiresUtc = RememberMe ? DateTimeOffset.UtcNow.AddDays(30) : DateTimeOffset.UtcNow.AddHours(8)
+                            IsPersistent = true,
+                            ExpiresUtc = RememberMe
+                                ? DateTimeOffset.UtcNow.AddDays(30)
+                                : DateTimeOffset.UtcNow.AddHours(8),
+                            AllowRefresh = true
                         });
 
+                    _logger.LogInformation("Login successful for {Email}, redirecting to {ReturnUrl}", Email, returnUrl);
                     return Redirect(returnUrl);
                 }
+
+                ErrorMessage = "Login successful but authentication failed. Please try again.";
             }
             else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
-                ErrorMessage = "Invalid email or password. Please try again.";
+                ErrorMessage = "Invalid email or password. Please check your credentials and try again.";
+            }
+            else if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+            {
+                ErrorMessage = "Invalid login request. Please check your information.";
             }
             else
             {
-                ErrorMessage = "An error occurred during login. Please try again later.";
+                _logger.LogWarning("Login API returned {StatusCode} for {Email}", response.StatusCode, Email);
+                ErrorMessage = $"An error occurred during login ({response.StatusCode}). Please try again.";
             }
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogError(ex, "HTTP error during login for {Email}", Email);
+            ErrorMessage = "Unable to connect to the authentication server. Please check your connection.";
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "JSON parse error during login for {Email}", Email);
+            ErrorMessage = "Received invalid response from server. Please try again.";
         }
         catch (Exception ex)
         {
-            ErrorMessage = "Unable to connect to the server. Please try again later.";
-            Console.WriteLine($"Login error: {ex.Message}");
+            _logger.LogError(ex, "Unexpected error during login for {Email}", Email);
+            ErrorMessage = "An unexpected error occurred. Please try again.";
         }
 
         return Page();
     }
 
-    private class AuthResponse
+    private sealed class AuthResponse
     {
         public string? Token { get; set; }
         public string? Email { get; set; }

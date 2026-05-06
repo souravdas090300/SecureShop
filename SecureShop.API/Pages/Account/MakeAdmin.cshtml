@@ -1,0 +1,66 @@
+@page
+@model SecureShop.API.Pages.Account.MakeAdminModel
+@{
+    ViewData["Title"] = "Assign Admin Role";
+}
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-danger text-white">
+                    <h4 class="mb-0">⚠️ Assign Admin Role (Development Only)</h4>
+                </div>
+                <div class="card-body">
+                    @if (!string.IsNullOrEmpty(Model.SuccessMessage))
+                    {
+                        <div class="alert alert-success">@Model.SuccessMessage</div>
+                    }
+                    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+                    {
+                        <div class="alert alert-danger">@Model.ErrorMessage</div>
+                    }
+
+                    <form method="post">
+                        <div class="mb-3">
+                            <label class="form-label">Email Address</label>
+                            <input type="email" class="form-control" asp-for="Email" required />
+                            <small class="text-muted">Enter email of existing user to make them admin</small>
+                        </div>
+                        <button type="submit" class="btn btn-danger w-100">Assign Admin Role</button>
+                    </form>
+                    
+                    <hr class="my-4" />
+                    
+                    <h5 class="mb-3">Or Create New Admin User</h5>
+                    <form method="post" asp-page-handler="CreateAdmin">
+                        <div class="mb-3">
+                            <label class="form-label">Email Address</label>
+                            <input type="email" class="form-control" asp-for="NewAdminEmail" required />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">First Name</label>
+                            <input type="text" class="form-control" asp-for="NewAdminFirstName" required />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Last Name</label>
+                            <input type="text" class="form-control" asp-for="NewAdminLastName" required />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Password</label>
+                            <input type="password" class="form-control" asp-for="NewAdminPassword" required />
+                            <small class="text-muted">Min 6 characters, must include uppercase, number, and special character</small>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100">Create New Admin User</button>
+                    </form>
+
+                    <hr />
+                    <p class="text-muted small mb-0">
+                        This page assigns the Admin role to any existing user. 
+                        <strong>Delete this page in production!</strong>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

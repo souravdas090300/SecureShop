@@ -12,12 +12,18 @@ using SecureShop.Domain.Exceptions;
 
 namespace SecureShop.Infrastructure.Services;
 
+/// <summary>
+/// Infrastructure-layer implementation of <see cref="IAuthService"/>.
+/// Handles user registration, credential-based login, and Google OAuth sign-in
+/// using ASP.NET Core Identity and JWT bearer tokens (HMAC-SHA256, 8-hour expiry).
+/// </summary>
 public class AuthService : IAuthService
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole> _roleManager;
     private readonly IConfiguration _config;
 
+    /// <summary>Injects Identity managers and application configuration.</summary>
     public AuthService(
         UserManager<ApplicationUser> userManager, 
         RoleManager<IdentityRole> roleManager,
@@ -28,6 +34,7 @@ public class AuthService : IAuthService
         _config = config;
     }
 
+    /// <inheritdoc />
     public async Task<AuthResponseDto> RegisterAsync(RegisterDto dto)
     {
         var existing = await _userManager.FindByEmailAsync(dto.Email);
@@ -53,6 +60,7 @@ public class AuthService : IAuthService
         return await GenerateTokenAsync(user);
     }
 
+    /// <inheritdoc />
     public async Task<AuthResponseDto> LoginAsync(LoginDto dto)
     {
         Console.WriteLine($"[AuthService] Login attempt - Email: '{dto.Email}', Password length: {dto.Password?.Length ?? 0}");
@@ -72,7 +80,8 @@ public class AuthService : IAuthService
             throw new DomainException("Invalid credentials");
         }
         
-        var passwordValid = await _userManager.CheckPasswordAsync(user, dto.Password);
+        // Password is guaranteed to be non-null here due to check above
+        var passwordValid = await _userManager.CheckPasswordAsync(user, dto.Password!);
         Console.WriteLine($"[AuthService] Password check result: {passwordValid}");
         
         if (!passwordValid)
@@ -85,6 +94,7 @@ public class AuthService : IAuthService
         return await GenerateTokenAsync(user);
     }
 
+    /// <inheritdoc />
     public async Task<AuthResponseDto> GoogleSignInAsync(GoogleSignInDto dto)
     {
         try
@@ -139,6 +149,11 @@ public class AuthService : IAuthService
         }
     }
 
+    /// <summary>
+    /// Builds and signs a JWT for the given user, embedding standard identity claims
+    /// (sub, email, given_name, family_name, jti) plus all role claims.
+    /// Token is valid for 8 hours.
+    /// </summary>
     private async Task<AuthResponseDto> GenerateTokenAsync(ApplicationUser user)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Secret"]!));
@@ -148,6 +163,7 @@ public class AuthService : IAuthService
             new Claim(ClaimTypes.NameIdentifier, user.Id),
             new Claim(ClaimTypes.Email, user.Email!),
             new Claim(ClaimTypes.GivenName, user.FirstName),
+            new Claim(ClaimTypes.Surname, user.LastName),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 
@@ -161,6 +177,6 @@ public class AuthService : IAuthService
 
         return new AuthResponseDto(
             new JwtSecurityTokenHandler().WriteToken(token),
-            user.Email!, user.FirstName, expires);
+            user.Email!, user.FirstName, user.LastName, expires);
     }
 }

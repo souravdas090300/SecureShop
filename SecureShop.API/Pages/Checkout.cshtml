@@ -92,22 +92,28 @@
 
                         <div class="mb-3">
                             <label for="cardNumber" class="form-label">Card Number *</label>
-                            <input type="text" class="form-control" id="cardNumber" name="CardNumber" 
-                                   placeholder="4242 4242 4242 4242" maxlength="19" required>
+                            <input type="text" class="form-control" id="cardNumber"
+                                   placeholder="4242 4242 4242 4242" maxlength="19"
+                                   autocomplete="cc-number" required>
                         </div>
 
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label for="expiryDate" class="form-label">Expiry Date *</label>
-                                <input type="text" class="form-control" id="expiryDate" name="ExpiryDate" 
-                                       placeholder="MM/YY" maxlength="5" required>
+                                <input type="text" class="form-control" id="expiryDate"
+                                       placeholder="MM/YY" maxlength="5"
+                                       autocomplete="cc-exp" required>
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label for="cvv" class="form-label">CVV *</label>
-                                <input type="text" class="form-control" id="cvv" name="CVV" 
-                                       placeholder="123" maxlength="4" required>
+                                <input type="text" class="form-control" id="cvv"
+                                       placeholder="123" maxlength="4"
+                                       autocomplete="cc-csc" required>
                             </div>
                         </div>
+
+                        @* Hidden field: populated by JS from localStorage cart before form submit *@
+                        <input type="hidden" asp-for="CartItemsJson" id="cartItemsJsonInput" />
 
                         <div class="d-grid gap-2 mt-4">
                             <button type="submit" class="btn btn-success btn-lg" id="placeOrderBtn">
@@ -209,6 +215,19 @@
 
         // Handle form submission
         document.getElementById('checkoutForm')?.addEventListener('submit', function(e) {
+            // Populate the hidden CartItemsJson field from localStorage before the form posts.
+            const cart = JSON.parse(localStorage.getItem('cart') || '[]');
+            const items = cart.map(function(item) {
+                return { productId: item.id, quantity: item.quantity };
+            });
+            document.getElementById('cartItemsJsonInput').value = JSON.stringify(items);
+
+            if (items.length === 0) {
+                e.preventDefault();
+                alert('Your cart is empty. Please add items before checking out.');
+                return;
+            }
+
             const placeOrderBtn = document.getElementById('placeOrderBtn');
             placeOrderBtn.disabled = true;
             placeOrderBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';

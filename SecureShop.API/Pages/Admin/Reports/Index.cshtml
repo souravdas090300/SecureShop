@@ -1,0 +1,88 @@
+@page
+@model SecureShop.API.Pages.Admin.Reports.AdminReportsModel
+@{ ViewData["Title"] = "Reports"; }
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-1"><i class="fas fa-chart-line me-2"></i>Reports & Analytics</h2>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0">
+            <li class="breadcrumb-item"><a href="/admin">Dashboard</a></li>
+            <li class="breadcrumb-item active">Reports</li>
+        </ol></nav>
+    </div>
+</div>
+
+<!-- Summary cards populated by JS -->
+<div class="row g-4 mb-4" id="reportCards">
+    <div class="col-12 text-center py-4"><div class="spinner-border text-primary"></div></div>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-6">
+        <div class="card"><div class="card-header"><h5 class="mb-0">Orders by Status</h5></div>
+        <div class="card-body" id="statusBreakdown"></div></div>
+    </div>
+    <div class="col-md-6">
+        <div class="card"><div class="card-header"><h5 class="mb-0">Revenue Summary</h5></div>
+        <div class="card-body" id="revenueSummary"></div></div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+const apiBaseUrl = '@Model.ApiBaseUrl';
+
+async function loadReports() {
+    const [ordersRes, productsRes] = await Promise.all([
+        fetch(`${apiBaseUrl}/api/orders`, {headers:{'Authorization':`Bearer ${getCookie('AuthToken')}`}}),
+        fetch(`${apiBaseUrl}/api/products`)
+    ]);
+
+    const orders = ordersRes.ok ? await ordersRes.json() : [];
+    const products = productsRes.ok ? await productsRes.json() : [];
+
+    const statusMap = {0:'Pending',1:'Processing',2:'Shipped',3:'Completed',4:'Cancelled'};
+    const classMap = {0:'warning',1:'info',2:'primary',3:'success',4:'danger'};
+
+    const totalRevenue = orders.filter(o=>o.status===3).reduce((s,o)=>s+o.totalAmount,0);
+    const pending = orders.filter(o=>o.status===0).length;
+    const completed = orders.filter(o=>o.status===3).length;
+
+    document.getElementById('reportCards').innerHTML = `
+        <div class="col-md-3"><div class="stat-card text-center">
+            <h3 class="fw-bold text-primary">${orders.length}</h3><p class="text-muted mb-0">Total Orders</p></div></div>
+        <div class="col-md-3"><div class="stat-card text-center">
+            <h3 class="fw-bold text-success">$${totalRevenue.toFixed(2)}</h3><p class="text-muted mb-0">Total Revenue</p></div></div>
+        <div class="col-md-3"><div class="stat-card text-center">
+            <h3 class="fw-bold text-warning">${pending}</h3><p class="text-muted mb-0">Pending Orders</p></div></div>
+        <div class="col-md-3"><div class="stat-card text-center">
+            <h3 class="fw-bold text-info">${products.length}</h3><p class="text-muted mb-0">Total Products</p></div></div>`;
+
+    const statusCounts = [0,1,2,3,4].map(s=>({
+        label: statusMap[s], count: orders.filter(o=>o.status===s).length, cls: classMap[s]
+    }));
+    document.getElementById('statusBreakdown').innerHTML = statusCounts.map(s=>`
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <span class="badge bg-${s.cls} me-2">${s.label}</span>
+            <div class="flex-grow-1 mx-3">
+                <div class="progress" style="height:8px">
+                    <div class="progress-bar bg-${s.cls}" style="width:${orders.length?s.count/orders.length*100:0}%"></div>
+                </div>
+            </div>
+            <span class="fw-bold">${s.count}</span>
+        </div>`).join('');
+
+    const lowStock = products.filter(p=>p.stock<10).length;
+    const outStock = products.filter(p=>p.stock===0).length;
+    document.getElementById('revenueSummary').innerHTML = `
+        <div class="d-flex justify-content-between py-2 border-bottom"><span>Completed Orders</span><strong>${completed}</strong></div>
+        <div class="d-flex justify-content-between py-2 border-bottom"><span>Total Revenue</span><strong class="text-success">$${totalRevenue.toFixed(2)}</strong></div>
+        <div class="d-flex justify-content-between py-2 border-bottom"><span>Avg. Order Value</span><strong>$${completed?( totalRevenue/completed).toFixed(2):'0.00'}</strong></div>
+        <div class="d-flex justify-content-between py-2 border-bottom"><span>Low Stock Products</span><strong class="text-warning">${lowStock}</strong></div>
+        <div class="d-flex justify-content-between py-2"><span>Out of Stock</span><strong class="text-danger">${outStock}</strong></div>`;
+}
+
+function getCookie(n){const v=`; ${document.cookie}`,p=v.split(`; ${n}=`);if(p.length===2)return p.pop().split(';').shift();return null;}
+document.addEventListener('DOMContentLoaded', loadReports);
+</script>
+}

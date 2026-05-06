@@ -1,4 +1,5 @@
 @page
+@model CartModel
 @{
     ViewData["Title"] = "Shopping Cart";
 }
@@ -94,6 +95,10 @@
                             <div class="col-md-4">
                                 <h6 class="mb-0">${item.name}</h6>
                                 <small class="text-muted">$${item.price.toFixed(2)} each</small>
+                                ${item.color ? `<div class="mt-1">
+                                    <span class="badge bg-secondary">${item.color}</span>
+                                    ${item.size ? `<span class="badge bg-secondary ms-1">${item.size}</span>` : ''}
+                                </div>` : ''}
                             </div>
                             <div class="col-md-3">
                                 <div class="input-group">

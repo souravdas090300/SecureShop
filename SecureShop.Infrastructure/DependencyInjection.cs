@@ -10,8 +10,16 @@ using StackExchange.Redis;
 
 namespace SecureShop.Infrastructure;
 
+/// <summary>
+/// Extension methods that register Infrastructure-layer services into the DI container.
+/// </summary>
 public static class DependencyInjection
 {
+    /// <summary>
+    /// Registers all Infrastructure services: EF Core (<see cref="AppDbContext"/>),
+    /// ASP.NET Core Identity, Redis cache, and all repository/service implementations.
+    /// Falls back gracefully when connection strings are missing (local dev without DB/Redis).
+    /// </summary>
     public static IServiceCollection AddInfrastructureServices(
         this IServiceCollection services, IConfiguration config)
     {
@@ -82,8 +90,11 @@ public static class DependencyInjection
         services.AddScoped<ICacheService>(sp =>
         {
             var conn = sp.GetService<IConnectionMultiplexer>();
+            // If Redis is not available (null connection), fall back to the no-op cache so the
+            // application continues to function without caching benefits.
             return conn != null ? new CacheService(conn) : new NullCacheService();
         });
+        // Register all application-layer interface implementations.
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IPaymentService, PaymentService>();
         services.AddScoped<IProductRepository, ProductRepository>();

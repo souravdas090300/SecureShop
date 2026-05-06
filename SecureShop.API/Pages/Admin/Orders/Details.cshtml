@@ -1,0 +1,113 @@
+@page "/admin/orders/{id}"
+@model SecureShop.API.Pages.Admin.Orders.AdminOrderDetailsModel
+@{ ViewData["Title"] = "Order Details"; }
+
+<div class="d-flex align-items-center mb-4 gap-3">
+    <a href="/admin/orders" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-arrow-left"></i>
+    </a>
+    <div>
+        <h2 class="fw-bold mb-0">Order Details</h2>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="/admin">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="/admin/orders">Orders</a></li>
+                <li class="breadcrumb-item active">Details</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div id="orderContent">
+    <div class="text-center py-5">
+        <div class="spinner-border text-primary"></div>
+        <div class="mt-2 text-muted">Loading order...</div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+const apiBaseUrl = '@Model.ApiBaseUrl';
+const orderId = '@Model.OrderId';
+
+async function loadOrder() {
+    try {
+        const res = await fetch(`${apiBaseUrl}/api/orders/${orderId}`, {
+            credentials: 'include',
+            headers: { 'Authorization': `Bearer ${getCookie('AuthToken')}` }
+        });
+        if (!res.ok) { document.getElementById('orderContent').innerHTML = '<div class="alert alert-danger">Order not found</div>'; return; }
+        const order = await res.json();
+        renderOrder(order);
+    } catch(e) {
+        document.getElementById('orderContent').innerHTML = '<div class="alert alert-danger">Failed to load order</div>';
+    }
+}
+
+function renderOrder(order) {
+    const statusMap = {0:'Pending',1:'Processing',2:'Shipped',3:'Completed',4:'Cancelled'};
+    const classMap = {0:'warning',1:'info',2:'primary',3:'success',4:'danger'};
+    const s = order.status;
+    const items = (order.items||[]).map(i=>`
+        <tr>
+            <td>${i.productName||'N/A'}</td>
+            <td class="text-center">${i.quantity}</td>
+            <td class="text-end">$${(i.unitPrice ?? i.price ?? 0).toFixed(2)}</td>
+            <td class="text-end fw-bold">$${(i.quantity*(i.unitPrice ?? i.price ?? 0)).toFixed(2)}</td>
+        </tr>`).join('');
+    document.getElementById('orderContent').innerHTML = `
+        <div class="row g-4">
+            <div class="col-md-8">
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Order Items</h5>
+                        <span class="badge bg-${classMap[s]}">${statusMap[s]||'Unknown'}</span>
+                    </div>
+                    <div class="card-body">
+                        <table class="table"><thead><tr><th>Product</th><th class="text-center">Qty</th><th class="text-end">Price</th><th class="text-end">Subtotal</th></tr></thead><tbody>${items}</tbody>
+                        <tfoot><tr><td colspan="3" class="text-end fw-bold">Total</td><td class="text-end fw-bold text-success fs-5">$${order.totalAmount.toFixed(2)}</td></tr></tfoot></table>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h6 class="fw-bold mb-3">Order Info</h6>
+                        <p class="mb-1"><small class="text-muted">Order ID</small></p>
+                        <p class="fw-bold">#${order.id.substring(0,8).toUpperCase()}</p>
+                        <p class="mb-1"><small class="text-muted">Date</small></p>
+                        <p>${new Date(order.createdAt || order.orderDate).toLocaleString()}</p>
+                        <p class="mb-1"><small class="text-muted">Customer</small></p>
+                        <p>${order.customerEmail||'N/A'}</p>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="fw-bold mb-3">Update Status</h6>
+                        <select class="form-select mb-3" id="statusSelect">
+                            ${[0,1,2,3,4].map(v=>`<option value="${v}" ${v===s?'selected':''}>${statusMap[v]}</option>`).join('')}
+                        </select>
+                        <button class="btn btn-primary w-100" onclick="updateStatus('${order.id}')">
+                            <i class="fas fa-save me-2"></i>Update
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+}
+
+async function updateStatus(id) {
+    const status = parseInt(document.getElementById('statusSelect').value);
+    const res = await fetch(`${apiBaseUrl}/api/orders/${id}/status`, {
+        method:'PUT',
+        credentials: 'include',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({status})
+    });
+    if (res.ok) { loadOrder(); } else { alert('Failed to update status'); }
+}
+
+function getCookie(n){const v=`; ${document.cookie}`,p=v.split(`; ${n}=`);if(p.length===2)return p.pop().split(';').shift();return null;}
+document.addEventListener('DOMContentLoaded', loadOrder);
+</script>
+}

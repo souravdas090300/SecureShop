@@ -79,14 +79,14 @@
 </div>
 
 <!-- Order Details Modal -->
-<div class="modal fade" id="orderDetailsModal" tabindex="-1">
+<div class="modal fade" id="orderDetailsModal" tabindex="-1" aria-modal="true" role="dialog">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">
+                <h5 class="modal-title" id="orderDetailsModalLabel">
                     <i class="fas fa-receipt"></i> Order Details
                 </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body" id="orderDetailsContent">
                 <div class="text-center py-4">
@@ -108,13 +108,12 @@
         async function loadOrders() {
             try {
                 const response = await fetch(`${apiBaseUrl}/api/orders`, {
-                    headers: {
-                        'Authorization': `Bearer ${getCookie('AuthToken')}`
-                    }
+                    credentials: 'include'
                 });
 
                 if (response.ok) {
-                    allOrders = await response.json();
+                    const data = await response.json();
+                    allOrders = Array.isArray(data) ? data : (data.items ?? data.data ?? []);
                     renderOrders(allOrders);
                 } else if (response.status === 401) {
                     showError('Please log in as an admin to view orders');
@@ -144,13 +143,13 @@
 
             tbody.innerHTML = orders.map(order => {
                 const statusBadge = getStatusBadge(order.status);
-                const date = new Date(order.orderDate).toLocaleString();
+                const date = new Date(order.createdAt || order.orderDate).toLocaleString();
                 const itemCount = order.items ? order.items.length : 0;
 
                 return `
                     <tr>
                         <td><strong>#${order.id.substring(0, 8).toUpperCase()}</strong></td>
-                        <td>${escapeHtml(order.customerEmail || 'N/A')}</td>
+                        <td>${escapeHtml(order.customerEmail || order.userEmail || order.user?.email || (order.userId ? order.userId.substring(0,8)+'...' : 'N/A'))}</td>
                         <td>${date}</td>
                         <td>${itemCount} item(s)</td>
                         <td><strong>$${order.totalAmount.toFixed(2)}</strong></td>
@@ -192,7 +191,10 @@
         }
 
         async function viewOrderDetails(orderId) {
-            const modal = new bootstrap.Modal(document.getElementById('orderDetailsModal'));
+            const modalEl = document.getElementById('orderDetailsModal');
+            // Fix aria-hidden accessibility warning: remove attr before show so focused descendants are not hidden
+            modalEl.removeAttribute('aria-hidden');
+            const modal = new bootstrap.Modal(modalEl);
             const content = document.getElementById('orderDetailsContent');
             
             content.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x"></i></div>';
@@ -200,9 +202,8 @@
 
             try {
                 const response = await fetch(`${apiBaseUrl}/api/orders/${orderId}`, {
-                    headers: {
-                        'Authorization': `Bearer ${getCookie('AuthToken')}`
-                    }
+                    credentials: 'include',
+                    headers: { 'Authorization': `Bearer ${getCookie('AuthToken')}` }
                 });
 
                 if (response.ok) {
@@ -220,7 +221,7 @@
         function renderOrderDetails(order) {
             const content = document.getElementById('orderDetailsContent');
             const statusBadge = getStatusBadge(order.status);
-            const date = new Date(order.orderDate).toLocaleString();
+            const date = new Date(order.createdAt || order.orderDate).toLocaleString();
 
             let itemsHtml = '';
             if (order.items && order.items.length > 0) {
@@ -228,8 +229,8 @@
                     <tr>
                         <td>${escapeHtml(item.productName || 'N/A')}</td>
                         <td class="text-center">${item.quantity}</td>
-                        <td class="text-end">$${item.price.toFixed(2)}</td>
-                        <td class="text-end"><strong>$${(item.quantity * item.price).toFixed(2)}</strong></td>
+                        <td class="text-end">$${(item.unitPrice ?? item.price ?? 0).toFixed(2)}</td>
+                        <td class="text-end"><strong>$${(item.quantity * (item.unitPrice ?? item.price ?? 0)).toFixed(2)}</strong></td>
                     </tr>
                 `).join('');
             } else {
@@ -240,7 +241,7 @@
                 <div class="row mb-3">
                     <div class="col-md-6">
                         <p><strong>Order ID:</strong> #${order.id.substring(0, 8).toUpperCase()}</p>
-                        <p><strong>Customer:</strong> ${escapeHtml(order.customerEmail || 'N/A')}</p>
+                        <p><strong>Customer:</strong> ${escapeHtml(order.customerEmail || order.userEmail || order.user?.email || (order.userId ? order.userId.substring(0,8)+'...' : 'N/A'))}</p>
                         <p><strong>Date:</strong> ${date}</p>
                     </div>
                     <div class="col-md-6 text-end">
@@ -275,12 +276,10 @@
             }
 
             try {
-                const response = await fetch(`${apiBaseUrl}/api/orders/${orderId}`, {
+                const response = await fetch(`${apiBaseUrl}/api/orders/${orderId}/status`, {
                     method: 'PUT',
-                    headers: {
-                        'Authorization': `Bearer ${getCookie('AuthToken')}`,
-                        'Content-Type': 'application/json'
-                    },
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ status: newStatus })
                 });
 
@@ -317,7 +316,7 @@
             if (dateFilter) {
                 const filterDate = new Date(dateFilter).toDateString();
                 filtered = filtered.filter(o => 
-                    new Date(o.orderDate).toDateString() === filterDate
+                    new Date(o.createdAt || o.orderDate).toDateString() === filterDate
                 );
             }
 

@@ -1,0 +1,134 @@
+@page
+@model SecureShop.API.Pages.Account.AuthTestModel
+@{
+    ViewData["Title"] = "Authentication Test";
+}
+
+<div class="container my-5">
+    <h2>Authentication Debug Information</h2>
+    
+    <div class="card mt-4">
+        <div class="card-header bg-primary text-white">
+            <h5>Server-Side Authentication State</h5>
+        </div>
+        <div class="card-body">
+            <table class="table">
+                <tr>
+                    <th>IsAuthenticated:</th>
+                    <td><strong>@Model.IsAuthenticated</strong></td>
+                </tr>
+                <tr>
+                    <th>User.Identity.Name:</th>
+                    <td><strong>@Model.UserName</strong></td>
+                </tr>
+                <tr>
+                    <th>User.Identity.AuthenticationType:</th>
+                    <td>@Model.AuthenticationType</td>
+                </tr>
+                <tr>
+                    <th>Email:</th>
+                    <td>@Model.Email</td>
+                </tr>
+                <tr>
+                    <th>First Name:</th>
+                    <td>@Model.FirstName</td>
+                </tr>
+                <tr>
+                    <th>Last Name:</th>
+                    <td>@Model.LastName</td>
+                </tr>
+                <tr>
+                    <th>Total Claims:</th>
+                    <td>@Model.ClaimCount</td>
+                </tr>
+            </table>
+            
+            <h6 class="mt-4">All Claims:</h6>
+            <div class="table-responsive">
+                <table class="table table-sm table-striped">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var claim in Model.Claims)
+                        {
+                            <tr>
+                                <td><code>@claim.Key</code></td>
+                                <td>@claim.Value</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card mt-4">
+        <div class="card-header bg-info text-white">
+            <h5>Client-Side Information</h5>
+        </div>
+        <div class="card-body">
+            <table class="table" id="clientInfo">
+                <tr>
+                    <th>Cookies:</th>
+                    <td id="cookieList">Loading...</td>
+                </tr>
+                <tr>
+                    <th>User Agent:</th>
+                    <td id="userAgent">Loading...</td>
+                </tr>
+            </table>
+            
+            <button class="btn btn-primary" onclick="testApiAuth()">Test API Authentication</button>
+            <div id="apiResult" class="mt-3"></div>
+        </div>
+    </div>
+    
+    <div class="mt-4">
+        <a href="/account/login" class="btn btn-success">Go to Login</a>
+        <a href="/account/logout" class="btn btn-danger">Logout</a>
+        <a href="/" class="btn btn-secondary">Home</a>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Display client-side cookies
+        document.getElementById('cookieList').textContent = document.cookie || '(none visible to JavaScript)';
+        document.getElementById('userAgent').textContent = navigator.userAgent;
+        
+        // Test API authentication
+        async function testApiAuth() {
+            const resultDiv = document.getElementById('apiResult');
+            resultDiv.innerHTML = '<div class="spinner-border spinner-border-sm"></div> Testing...';
+            
+            try {
+                const response = await fetch('/api/auth/status');
+                const data = await response.json();
+                
+                resultDiv.innerHTML = `
+                    <div class="alert alert-${data.isAuthenticated ? 'success' : 'warning'}">
+                        <h6>API Authentication Status</h6>
+                        <p><strong>Authenticated:</strong> ${data.isAuthenticated}</p>
+                        <p><strong>Name:</strong> ${data.name || '(none)'}</p>
+                        <p><strong>Email:</strong> ${data.email || '(none)'}</p>
+                        <p><strong>Claims Count:</strong> ${data.claimsCount}</p>
+                        <details>
+                            <summary>View all claims</summary>
+                            <pre>${JSON.stringify(data.claims, null, 2)}</pre>
+                        </details>
+                    </div>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <strong>Error:</strong> ${error.message}
+                    </div>
+                `;
+            }
+        }
+    </script>
+}

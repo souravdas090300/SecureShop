@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - SecureShop Admin</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --sidebar-width: 260px;
+            --sidebar-bg: #1e293b;
+            --sidebar-hover: #334155;
+            --topbar-height: 70px;
+            --primary-color: #3b82f6;
+            --primary-hover: #2563eb;
+            --accent-color: #10b981;
+            --danger-color: #ef4444;
+            --warning-color: #f59e0b;
+            --info-color: #06b6d4;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f1f5f9;
+            overflow-x: hidden;
+        }
+        
+        /* Sidebar */
+        .admin-sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: var(--sidebar-width);
+            height: 100vh;
+            background: var(--sidebar-bg);
+            color: #e2e8f0;
+            z-index: 1000;
+            transition: transform 0.3s ease;
+            overflow-y: auto;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+        }
+        
+        .admin-sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .admin-sidebar::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 3px;
+        }
+        
+        .sidebar-brand {
+            padding: 1.5rem 1.25rem;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            transition: all 0.3s ease;
+        }
+        
+        .sidebar-brand:hover {
+            background: #334155;
+        }
+        
+        .sidebar-brand-text {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: white;
+            letter-spacing: 0.5px;
+        }
+        
+        .sidebar-nav {
+            padding: 1rem 0;
+        }
+        
+        .nav-section-title {
+            padding: 1.5rem 1.25rem 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #64748b;
+            letter-spacing: 0.5px;
+        }
+        
+        .nav-item {
+            list-style: none;
+        }
+        
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.875rem 1.25rem;
+            color: #cbd5e1;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border-left: 3px solid transparent;
+            font-size: 0.95rem;
+        }
+        
+        .nav-link:hover {
+            background: var(--sidebar-hover);
+            color: white;
+            border-left-color: var(--primary-color);
+        }
+        
+        .nav-link.active {
+            background: var(--sidebar-hover);
+            color: white;
+            border-left-color: var(--primary-color);
+        }
+        
+        .nav-link i {
+            font-size: 1.1rem;
+            width: 20px;
+            text-align: center;
+        }
+        
+        .nav-badge {
+            margin-left: auto;
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        
+        /* Top Bar */
+        .admin-topbar {
+            position: fixed;
+            top: 0;
+            left: var(--sidebar-width);
+            right: 0;
+            height: var(--topbar-height);
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 2rem;
+            z-index: 999;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        
+        .topbar-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .sidebar-toggle {
+            display: none;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: #64748b;
+            cursor: pointer;
+            padding: 0.5rem;
+        }
+        
+        .topbar-search {
+            position: relative;
+        }
+        
+        .topbar-search input {
+            padding: 0.625rem 1rem 0.625rem 2.5rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            width: 300px;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+        }
+        
+        .topbar-search input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        
+        .topbar-search i {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #94a3b8;
+        }
+        
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+        
+        .topbar-icon {
+            position: relative;
+            background: none;
+            border: none;
+            font-size: 1.25rem;
+            color: #64748b;
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+        
+        .topbar-icon:hover {
+            background: #f1f5f9;
+            color: var(--primary-color);
+        }
+        
+        .topbar-icon .badge {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: var(--danger-color);
+            color: white;
+            border-radius: 10px;
+            padding: 0.15rem 0.4rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        
+        .admin-user-menu {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            cursor: pointer;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            transition: background 0.2s ease;
+        }
+        
+        .admin-user-menu:hover {
+            background: #f1f5f9;
+        }
+        
+        .admin-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 1rem;
+        }
+        
+        .admin-user-info {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .admin-user-name {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #1e293b;
+        }
+        
+        .admin-user-role {
+            font-size: 0.8rem;
+            color: #64748b;
+        }
+        
+        /* Main Content */
+        .admin-content {
+            margin-left: var(--sidebar-width);
+            margin-top: var(--topbar-height);
+            padding: 2rem;
+            min-height: calc(100vh - var(--topbar-height));
+        }
+        
+        /* Cards */
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            border: 1px solid #e2e8f0;
+            transition: all 0.2s ease;
+        }
+        
+        .stat-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+        }
+        
+        .card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        
+        /* Buttons */
+        .btn {
+            border-radius: 8px;
+            padding: 0.625rem 1.25rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-primary {
+            background: var(--primary-color);
+            border: none;
+        }
+        
+        .btn-primary:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+        
+        /* Responsive */
+        @@media (max-width: 992px) {
+            .admin-sidebar {
+                transform: translateX(-100%);
+            }
+            
+            .admin-sidebar.show {
+                transform: translateX(0);
+            }
+            
+            .sidebar-toggle {
+                display: block;
+            }
+            
+            .admin-topbar {
+                left: 0;
+            }
+            
+            .admin-content {
+                margin-left: 0;
+            }
+            
+            .topbar-search input {
+                width: 200px;
+            }
+        }
+        
+        @@media (max-width: 576px) {
+            .admin-content {
+                padding: 1rem;
+            }
+            
+            .topbar-search {
+                display: none;
+            }
+            
+            .admin-user-info {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <aside class="admin-sidebar" id="adminSidebar">
+        <div class="sidebar-brand">
+            <!-- SecureShop Logo -->
+            <img src="/secureshop-logo.svg" alt="SecureShop"
+                 style="height:40px;width:auto;object-fit:contain;flex-shrink:0;">
+            <div style="display:flex;flex-direction:column;line-height:1.1;">
+                <span class="sidebar-brand-text">SecureShop</span>
+                <span style="font-size:0.65rem;color:#94a3b8;letter-spacing:0.5px;font-weight:500;text-transform:uppercase;">Admin Panel</span>
+            </div>
+        </div>
+        
+        <ul class="sidebar-nav">
+            <li class="nav-section-title">Main</li>
+            <li class="nav-item">
+                <a href="/admin" class="nav-link @(Context.Request.Path == "/admin" ? "active" : "")">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span>Dashboard</span>
+                </a>
+            </li>
+            
+            <li class="nav-section-title">E-Commerce</li>
+            <li class="nav-item">
+                <a href="/admin/products" class="nav-link @(Context.Request.Path.StartsWithSegments("/admin/products") ? "active" : "")">
+                    <i class="fas fa-box"></i>
+                    <span>Products</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="/admin/orders" class="nav-link @(Context.Request.Path.StartsWithSegments("/admin/orders") ? "active" : "")">
+                    <i class="fas fa-shopping-cart"></i>
+                    <span>Orders</span>
+                    <span class="nav-badge bg-warning text-dark">New</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="/admin/customers" class="nav-link @(Context.Request.Path.StartsWithSegments("/admin/customers") ? "active" : "")">
+                    <i class="fas fa-users"></i>
+                    <span>Customers</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="/admin/categories" class="nav-link @(Context.Request.Path.StartsWithSegments("/admin/categories") ? "active" : "")">
+                    <i class="fas fa-tags"></i>
+                    <span>Categories</span>
+                </a>
+            </li>
+            
+            <li class="nav-section-title">Analytics</li>
+            <li class="nav-item">
+                <a href="/admin/reports" class="nav-link @(Context.Request.Path.StartsWithSegments("/admin/reports") ? "active" : "")">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Reports</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="/admin/analytics" class="nav-link @(Context.Request.Path.StartsWithSegments("/admin/analytics") ? "active" : "")">
+                    <i class="fas fa-chart-pie"></i>
+                    <span>Analytics</span>
+                </a>
+            </li>
+            
+            <li class="nav-section-title">Settings</li>
+            <li class="nav-item">
+                <a href="/admin/settings" class="nav-link @(Context.Request.Path.StartsWithSegments("/admin/settings") ? "active" : "")">
+                    <i class="fas fa-cog"></i>
+                    <span>Settings</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="/admin/users" class="nav-link @(Context.Request.Path.StartsWithSegments("/admin/users") ? "active" : "")">
+                    <i class="fas fa-user-shield"></i>
+                    <span>Admin Users</span>
+                </a>
+            </li>
+            
+            <li class="nav-section-title">External</li>
+            <li class="nav-item">
+                <a href="/swagger" class="nav-link" target="_blank">
+                    <i class="fas fa-code"></i>
+                    <span>API Docs</span>
+                    <i class="fas fa-external-link-alt ms-auto" style="font-size: 0.75rem;"></i>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="/" class="nav-link" target="_blank">
+                    <i class="fas fa-store"></i>
+                    <span>View Store</span>
+                    <i class="fas fa-external-link-alt ms-auto" style="font-size: 0.75rem;"></i>
+                </a>
+            </li>
+        </ul>
+    </aside>
+    
+    <!-- Top Bar -->
+    <header class="admin-topbar">
+        <div class="topbar-left">
+            <button class="sidebar-toggle" id="sidebarToggle">
+                <i class="fas fa-bars"></i>
+            </button>
+            <div class="topbar-search">
+                <i class="fas fa-search"></i>
+                <input type="text" placeholder="Search anything..." />
+            </div>
+        </div>
+        
+        <div class="topbar-right">
+            <button class="topbar-icon" title="Notifications">
+                <i class="fas fa-bell"></i>
+                <span class="badge">3</span>
+            </button>
+            <button class="topbar-icon" title="Messages">
+                <i class="fas fa-envelope"></i>
+                <span class="badge">5</span>
+            </button>
+            
+            <div class="dropdown">
+                <div class="admin-user-menu" data-bs-toggle="dropdown" aria-expanded="false">
+                    <div class="admin-avatar">
+                        @if (User.Identity?.IsAuthenticated == true)
+                        {
+                            @(User.Identity.Name?.Substring(0, 1).ToUpper())
+                        }
+                        else
+                        {
+                            <text>A</text>
+                        }
+                    </div>
+                    <div class="admin-user-info">
+                        <div class="admin-user-name">@(User.Identity?.Name ?? "Admin")</div>
+                        <div class="admin-user-role">Administrator</div>
+                    </div>
+                    <i class="fas fa-chevron-down" style="color: #94a3b8; font-size: 0.75rem;"></i>
+                </div>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                    <li><a class="dropdown-item" href="/admin/profile"><i class="fas fa-user me-2"></i>My Profile</a></li>
+                    <li><a class="dropdown-item" href="/admin/settings"><i class="fas fa-cog me-2"></i>Settings</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item text-danger" href="/admin/logout"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+                </ul>
+            </div>
+        </div>
+    </header>
+    
+    <!-- Main Content -->
+    <main class="admin-content">
+        @if (TempData["SuccessMessage"] != null)
+        {
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="fas fa-check-circle me-2"></i>@TempData["SuccessMessage"]
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        }
+        
+        @if (TempData["ErrorMessage"] != null)
+        {
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="fas fa-exclamation-circle me-2"></i>@TempData["ErrorMessage"]
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        }
+        
+        @RenderBody()
+    </main>
+    
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Sidebar toggle for mobile
+        document.getElementById('sidebarToggle')?.addEventListener('click', function() {
+            document.getElementById('adminSidebar').classList.toggle('show');
+        });
+        
+        // Close sidebar when clicking outside on mobile
+        document.addEventListener('click', function(event) {
+            const sidebar = document.getElementById('adminSidebar');
+            const toggle = document.getElementById('sidebarToggle');
+            
+            if (window.innerWidth <= 992 && 
+                !sidebar.contains(event.target) && 
+                !toggle.contains(event.target) &&
+                sidebar.classList.contains('show')) {
+                sidebar.classList.remove('show');
+            }
+        });
+        
+        // Helper function to get cookie
+        function getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+            return null;
+        }
+    </script>
+    
+    @RenderSection("Scripts", required: false)
+</body>
+</html>

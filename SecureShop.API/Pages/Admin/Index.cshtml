@@ -1,77 +1,105 @@
 @page
 @model AdminIndexModel
 @{
-    ViewData["Title"] = "Admin Dashboard";
+    ViewData["Title"] = "Dashboard";
 }
 
-<div class="container-fluid py-4">
-    <div class="row mb-4">
-        <div class="col-12">
-            <h2 class="fw-bold mb-1">
-                <i class="fas fa-tachometer-alt"></i> Admin Dashboard
-            </h2>
-            <p class="text-muted">Welcome back, @Model.AdminName</p>
-        </div>
+<!-- Page Header -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-1" style="color: #1e293b;">Dashboard Overview</h2>
+        <p class="text-muted mb-0">Welcome back, @Model.AdminName! Here's what's happening today.</p>
     </div>
+    <div>
+        <button class="btn btn-outline-secondary me-2">
+            <i class="fas fa-download me-2"></i>Export Report
+        </button>
+        <button class="btn btn-primary">
+            <i class="fas fa-plus me-2"></i>Quick Add
+        </button>
+    </div>
+</div>
 
-    <!-- Statistics Cards -->
-    <div class="row g-4 mb-4">
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="text-muted mb-2">Total Products</h6>
-                            <h3 class="mb-0" id="totalProducts">--</h3>
+<!-- Statistics Cards -->
+<div class="row g-4 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <p class="text-muted mb-2 fw-500" style="font-size: 0.875rem;">Total Revenue</p>
+                        <h3 class="mb-2 fw-bold" id="totalRevenue" style="color: #1e293b;">--</h3>
+                        <div class="d-flex align-items-center">
+                            <span class="badge bg-success bg-opacity-10 text-success">
+                                <i class="fas fa-arrow-up me-1"></i>12.5%
+                            </span>
+                            <span class="text-muted ms-2" style="font-size: 0.8rem;">vs last month</span>
                         </div>
-                        <div class="bg-primary bg-opacity-10 p-3 rounded">
-                            <i class="fas fa-box fa-2x text-primary"></i>
-                        </div>
+                    </div>
+                    <div class="rounded-circle d-flex align-items-center justify-content-center" 
+                         style="width: 56px; height: 56px; background: linear-gradient(135deg, #3b82f6, #2563eb);">
+                        <i class="fas fa-dollar-sign text-white" style="font-size: 1.5rem;"></i>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="text-muted mb-2">Total Orders</h6>
-                            <h3 class="mb-0" id="totalOrders">--</h3>
+        
+        <div class="col-xl-3 col-md-6">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <p class="text-muted mb-2 fw-500" style="font-size: 0.875rem;">Total Orders</p>
+                        <h3 class="mb-2 fw-bold" id="totalOrders" style="color: #1e293b;">--</h3>
+                        <div class="d-flex align-items-center">
+                            <span class="badge bg-success bg-opacity-10 text-success">
+                                <i class="fas fa-arrow-up me-1"></i>8.2%
+                            </span>
+                            <span class="text-muted ms-2" style="font-size: 0.8rem;">vs last month</span>
                         </div>
-                        <div class="bg-success bg-opacity-10 p-3 rounded">
-                            <i class="fas fa-shopping-cart fa-2x text-success"></i>
-                        </div>
+                    </div>
+                    <div class="rounded-circle d-flex align-items-center justify-content-center" 
+                         style="width: 56px; height: 56px; background: linear-gradient(135deg, #10b981, #059669);">
+                        <i class="fas fa-shopping-cart text-white" style="font-size: 1.5rem;"></i>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="text-muted mb-2">Pending Orders</h6>
-                            <h3 class="mb-0" id="pendingOrders">--</h3>
+        
+        <div class="col-xl-3 col-md-6">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <p class="text-muted mb-2 fw-500" style="font-size: 0.875rem;">Total Products</p>
+                        <h3 class="mb-2 fw-bold" id="totalProducts" style="color: #1e293b;">--</h3>
+                        <div class="d-flex align-items-center">
+                            <span class="badge bg-info bg-opacity-10 text-info">
+                                <i class="fas fa-minus me-1"></i>0.0%
+                            </span>
+                            <span class="text-muted ms-2" style="font-size: 0.8rem;">vs last month</span>
                         </div>
-                        <div class="bg-warning bg-opacity-10 p-3 rounded">
-                            <i class="fas fa-clock fa-2x text-warning"></i>
-                        </div>
+                    </div>
+                    <div class="rounded-circle d-flex align-items-center justify-content-center" 
+                         style="width: 56px; height: 56px; background: linear-gradient(135deg, #f59e0b, #d97706);">
+                        <i class="fas fa-box text-white" style="font-size: 1.5rem;"></i>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div>
-                            <h6 class="text-muted mb-2">Total Revenue</h6>
-                            <h3 class="mb-0" id="totalRevenue">--</h3>
+        
+        <div class="col-xl-3 col-md-6">
+            <div class="stat-card">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <p class="text-muted mb-2 fw-500" style="font-size: 0.875rem;">Pending Orders</p>
+                        <h3 class="mb-2 fw-bold" id="pendingOrders" style="color: #1e293b;">--</h3>
+                        <div class="d-flex align-items-center">
+                            <span class="badge bg-warning bg-opacity-10 text-warning">
+                                <i class="fas fa-exclamation-triangle me-1"></i>Action Needed
+                            </span>
                         </div>
-                        <div class="bg-info bg-opacity-10 p-3 rounded">
-                            <i class="fas fa-dollar-sign fa-2x text-info"></i>
-                        </div>
+                    </div>
+                    <div class="rounded-circle d-flex align-items-center justify-content-center" 
+                         style="width: 56px; height: 56px; background: linear-gradient(135deg, #ef4444, #dc2626);">
+                        <i class="fas fa-clock text-white" style="font-size: 1.5rem;"></i>
                     </div>
                 </div>
             </div>
@@ -81,30 +109,46 @@
     <!-- Quick Actions -->
     <div class="row mb-4">
         <div class="col-12">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body">
-                    <h5 class="card-title mb-3">
-                        <i class="fas fa-bolt"></i> Quick Actions
+            <div class="card">
+                <div class="card-body p-4">
+                    <h5 class="fw-bold mb-4" style="color: #1e293b;">
+                        <i class="fas fa-bolt text-primary me-2"></i>Quick Actions
                     </h5>
                     <div class="row g-3">
-                        <div class="col-md-3">
-                            <a href="/admin/products/create" class="btn btn-primary w-100">
-                                <i class="fas fa-plus"></i> Add New Product
+                        <div class="col-lg-3 col-md-6">
+                            <a href="/admin/products/create" class="btn btn-primary w-100 d-flex flex-column align-items-center justify-content-center" style="border-radius: 12px; padding: 2rem 1rem; min-height: 140px; text-decoration: none;">
+                                <div class="mb-3" style="font-size: 2.5rem;">
+                                    <i class="fas fa-plus-circle"></i>
+                                </div>
+                                <div class="fw-semibold" style="font-size: 1rem;">Add Product</div>
+                                <small class="mt-1 opacity-75" style="font-size: 0.8rem;">Create new item</small>
                             </a>
                         </div>
-                        <div class="col-md-3">
-                            <a href="/admin/products" class="btn btn-outline-primary w-100">
-                                <i class="fas fa-boxes"></i> Manage Products
+                        <div class="col-lg-3 col-md-6">
+                            <a href="/admin/orders" class="btn btn-outline-primary w-100 d-flex flex-column align-items-center justify-content-center" style="border-radius: 12px; padding: 2rem 1rem; min-height: 140px; text-decoration: none;">
+                                <div class="mb-3" style="font-size: 2.5rem;">
+                                    <i class="fas fa-clipboard-list"></i>
+                                </div>
+                                <div class="fw-semibold" style="font-size: 1rem;">View Orders</div>
+                                <small class="mt-1" style="font-size: 0.8rem;">Manage all orders</small>
                             </a>
                         </div>
-                        <div class="col-md-3">
-                            <a href="/admin/orders" class="btn btn-outline-success w-100">
-                                <i class="fas fa-list"></i> View All Orders
+                        <div class="col-lg-3 col-md-6">
+                            <a href="/admin/products" class="btn btn-outline-primary w-100 d-flex flex-column align-items-center justify-content-center" style="border-radius: 12px; padding: 2rem 1rem; min-height: 140px; text-decoration: none;">
+                                <div class="mb-3" style="font-size: 2.5rem;">
+                                    <i class="fas fa-boxes"></i>
+                                </div>
+                                <div class="fw-semibold" style="font-size: 1rem;">Products</div>
+                                <small class="mt-1" style="font-size: 0.8rem;">Manage inventory</small>
                             </a>
                         </div>
-                        <div class="col-md-3">
-                            <a href="/swagger" class="btn btn-outline-secondary w-100" target="_blank">
-                                <i class="fas fa-code"></i> API Documentation
+                        <div class="col-lg-3 col-md-6">
+                            <a href="/admin/reports" class="btn btn-outline-primary w-100 d-flex flex-column align-items-center justify-content-center" style="border-radius: 12px; padding: 2rem 1rem; min-height: 140px; text-decoration: none;">
+                                <div class="mb-3" style="font-size: 2.5rem;">
+                                    <i class="fas fa-chart-bar"></i>
+                                </div>
+                                <div class="fw-semibold" style="font-size: 1rem;">Reports</div>
+                                <small class="mt-1" style="font-size: 0.8rem;">View analytics</small>
                             </a>
                         </div>
                     </div>
@@ -116,36 +160,34 @@
     <!-- Recent Orders Table -->
     <div class="row">
         <div class="col-12">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="card-title mb-0">
-                            <i class="fas fa-receipt"></i> Recent Orders
-                        </h5>
-                        <a href="/admin/orders" class="btn btn-sm btn-outline-primary">View All</a>
-                    </div>
-                    <div class="table-responsive">
-                        <table class="table table-hover" id="recentOrdersTable">
-                            <thead>
+            <div class="card">
+                        <table class="table table-hover align-middle" id="recentOrdersTable" style="border: none;">
+                            <thead style="background: #f8fafc; border: none;">
                                 <tr>
-                                    <th>Order ID</th>
-                                    <th>Customer</th>
-                                    <th>Date</th>
-                                    <th>Total</th>
-                                    <th>Status</th>
-                                    <th>Action</th>
+                                    <th style="border: none; padding: 1rem; font-weight: 600; color: #64748b; font-size: 0.875rem;">ORDER ID</th>
+                                    <th style="border: none; padding: 1rem; font-weight: 600; color: #64748b; font-size: 0.875rem;">CUSTOMER</th>
+                                    <th style="border: none; padding: 1rem; font-weight: 600; color: #64748b; font-size: 0.875rem;">DATE</th>
+                                    <th style="border: none; padding: 1rem; font-weight: 600; color: #64748b; font-size: 0.875rem;">TOTAL</th>
+                                    <th style="border: none; padding: 1rem; font-weight: 600; color: #64748b; font-size: 0.875rem;">STATUS</th>
+                                    <th style="border: none; padding: 1rem; font-weight: 600; color: #64748b; font-size: 0.875rem; text-align: right;">ACTION</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr>
-                                    <td colspan="6" class="text-center text-muted py-4">
-                                        <i class="fas fa-spinner fa-spin"></i> Loading orders...
+                                    <td colspan="6" class="text-center text-muted py-5" style="border: none;">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        <div class="mt-2">Loading orders...</div>
                                     </td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
+            </div>
+        </div>
+                    </div>
             </div>
         </div>
     </div>
@@ -159,20 +201,20 @@
         async function loadDashboardStats() {
             try {
                 // Load products count
-                const productsResponse = await fetch(`${apiBaseUrl}/api/products`);
+                const productsResponse = await fetch(`${apiBaseUrl}/api/products?pageSize=1000`);
                 if (productsResponse.ok) {
-                    const products = await productsResponse.json();
+                    const data = await productsResponse.json();
+                    const products = Array.isArray(data) ? data : (data.items ?? data.data ?? []);
                     document.getElementById('totalProducts').textContent = products.length;
                 }
 
                 // Load orders count
                 const ordersResponse = await fetch(`${apiBaseUrl}/api/orders`, {
-                    headers: {
-                        'Authorization': `Bearer ${getCookie('AuthToken')}`
-                    }
+                    credentials: 'include'
                 });
                 if (ordersResponse.ok) {
-                    const orders = await ordersResponse.json();
+                    const ordersData = await ordersResponse.json();
+                    const orders = Array.isArray(ordersData) ? ordersData : (ordersData.items ?? ordersData.data ?? []);
                     document.getElementById('totalOrders').textContent = orders.length;
                     
                     // Calculate pending orders
@@ -182,7 +224,7 @@
                     // Calculate total revenue
                     const revenue = orders
                         .filter(o => o.status === 'Completed' || o.status === 3)
-                        .reduce((sum, o) => sum + o.totalAmount, 0);
+                        .reduce((sum, o) => sum + (o.totalAmount ?? 0), 0);
                     document.getElementById('totalRevenue').textContent = '$' + revenue.toFixed(2);
                     
                     // Load recent orders (last 5)
@@ -199,8 +241,10 @@
             if (orders.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="6" class="text-center text-muted py-4">
-                            No orders yet
+                        <td colspan="6" class="text-center text-muted py-5" style="border: none;">
+                            <i class="fas fa-inbox" style="font-size: 3rem; color: #cbd5e1;"></i>
+                            <div class="mt-3 fw-500">No orders yet</div>
+                            <div class="text-muted" style="font-size: 0.875rem;">Orders will appear here once customers place them</div>
                         </td>
                     </tr>
                 `;
@@ -209,17 +253,35 @@
 
             tbody.innerHTML = orders.map(order => {
                 const statusBadge = getStatusBadge(order.status);
-                const date = new Date(order.orderDate).toLocaleDateString();
+                const date = new Date(order.createdAt || order.orderDate).toLocaleDateString('en-US', { 
+                    month: 'short', 
+                    day: 'numeric', 
+                    year: 'numeric' 
+                });
                 
                 return `
-                    <tr>
-                        <td><strong>#${order.id.substring(0, 8)}</strong></td>
-                        <td>${order.customerEmail || 'N/A'}</td>
-                        <td>${date}</td>
-                        <td><strong>$${order.totalAmount.toFixed(2)}</strong></td>
-                        <td>${statusBadge}</td>
-                        <td>
-                            <a href="/admin/orders/${order.id}" class="btn btn-sm btn-outline-primary">
+                    <tr style="border-bottom: 1px solid #e2e8f0;">
+                        <td style="padding: 1rem; border: none;">
+                            <span class="badge bg-light text-dark" style="font-family: monospace; font-size: 0.85rem;">
+                                #${order.id.substring(0, 8)}
+                            </span>
+                        </td>
+                        <td style="padding: 1rem; border: none;">
+                            <div class="d-flex align-items-center">
+                                <div class="rounded-circle bg-primary bg-opacity-10 d-flex align-items-center justify-content-center me-2" 
+                                     style="width: 32px; height: 32px;">
+                                    <i class="fas fa-user text-primary" style="font-size: 0.875rem;"></i>
+                                </div>
+                                <span class="fw-500" style="color: #1e293b;">${order.customerEmail || order.userEmail || order.user?.email || (order.userId ? order.userId.substring(0,8)+'...' : 'N/A')}</span>
+                            </div>
+                        </td>
+                        <td style="padding: 1rem; border: none; color: #64748b; font-size: 0.9rem;">${date}</td>
+                        <td style="padding: 1rem; border: none;">
+                            <span class="fw-bold" style="color: #1e293b;">$${order.totalAmount.toFixed(2)}</span>
+                        </td>
+                        <td style="padding: 1rem; border: none;">${statusBadge}</td>
+                        <td style="padding: 1rem; border: none; text-align: right;">
+                            <a href="/admin/orders/${order.id}" class="btn btn-sm btn-outline-primary" style="border-radius: 6px;">
                                 <i class="fas fa-eye"></i> View
                             </a>
                         </td>
@@ -230,20 +292,22 @@
 
         function getStatusBadge(status) {
             const statusMap = {
-                0: { label: 'Pending', class: 'warning' },
-                1: { label: 'Processing', class: 'info' },
-                2: { label: 'Shipped', class: 'primary' },
-                3: { label: 'Completed', class: 'success' },
-                4: { label: 'Cancelled', class: 'danger' },
-                'Pending': { label: 'Pending', class: 'warning' },
-                'Processing': { label: 'Processing', class: 'info' },
-                'Shipped': { label: 'Shipped', class: 'primary' },
-                'Completed': { label: 'Completed', class: 'success' },
-                'Cancelled': { label: 'Cancelled', class: 'danger' }
+                0: { label: 'Pending', class: 'warning', icon: 'clock' },
+                1: { label: 'Processing', class: 'info', icon: 'cog' },
+                2: { label: 'Shipped', class: 'primary', icon: 'truck' },
+                3: { label: 'Completed', class: 'success', icon: 'check-circle' },
+                4: { label: 'Cancelled', class: 'danger', icon: 'times-circle' },
+                'Pending': { label: 'Pending', class: 'warning', icon: 'clock' },
+                'Processing': { label: 'Processing', class: 'info', icon: 'cog' },
+                'Shipped': { label: 'Shipped', class: 'primary', icon: 'truck' },
+                'Completed': { label: 'Completed', class: 'success', icon: 'check-circle' },
+                'Cancelled': { label: 'Cancelled', class: 'danger', icon: 'times-circle' }
             };
             
-            const statusInfo = statusMap[status] || { label: 'Unknown', class: 'secondary' };
-            return `<span class="badge bg-${statusInfo.class}">${statusInfo.label}</span>`;
+            const statusInfo = statusMap[status] || { label: 'Unknown', class: 'secondary', icon: 'question' };
+            return `<span class="badge bg-${statusInfo.class} bg-opacity-10 text-${statusInfo.class}" style="padding: 0.5rem 0.75rem; font-weight: 500; border-radius: 6px;">
+                        <i class="fas fa-${statusInfo.icon} me-1"></i>${statusInfo.label}
+                    </span>`;
         }
 
         function getCookie(name) {

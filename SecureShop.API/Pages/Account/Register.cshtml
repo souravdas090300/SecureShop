@@ -15,6 +15,14 @@
                         <p class="text-muted">Join SecureShop today</p>
                     </div>
 
+                    @if (TempData["SuccessMessage"] != null)
+                    {
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            <i class="fas fa-check-circle"></i> @TempData["SuccessMessage"]
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    }
+
                     @if (Model.ErrorMessage != null)
                     {
                         <div class="alert alert-danger" role="alert">
@@ -107,7 +115,7 @@
                         </div>
 
                         <div class="d-grid mb-3">
-                            <button type="submit" class="btn btn-primary btn-lg">
+                            <button type="submit" id="registerBtn" class="btn btn-primary btn-lg">
                                 <i class="fas fa-user-plus"></i> Create Account
                             </button>
                         </div>
@@ -220,7 +228,7 @@
                     document.cookie = `UserEmail=${data.email}; path=/; max-age=28800`;
                     document.cookie = `UserName=${data.firstName || data.name || ''}; path=/; max-age=28800`;
                     
-                    // Redirect to home page
+                    // Redirect to home page (already logged in with Google)
                     window.location.href = '/';
                 } else {
                     alert(data.message || 'Google sign-up failed. Please try again.');
@@ -258,6 +266,17 @@
             } else {
                 e.target.setCustomValidity('');
             }
+        });
+
+        // Handle form submission with loading state
+        document.querySelector('form')?.addEventListener('submit', function(e) {
+            console.log('Form submission started');
+            const submitBtn = document.getElementById('registerBtn');
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Creating account...';
+            }
+            // Form will submit normally to server
         });
     </script>
     <partial name="_ValidationScriptsPartial" />

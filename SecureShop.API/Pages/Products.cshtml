@@ -20,16 +20,24 @@
                     <h5 class="card-title">Filters</h5>
                     <form method="get">
                         <div class="mb-3">
+                            <label class="form-label">Search</label>
+                            <div class="input-group">
+                                <input type="text" name="search" class="form-control" placeholder="Search products..." value="@Model.Search">
+                                <button type="submit" class="btn btn-outline-secondary"><i class="fas fa-search"></i></button>
+                            </div>
+                        </div>
+                        <div class="mb-3">
                             <label class="form-label">Category</label>
                             <select name="category" class="form-select" onchange="this.form.submit()">
                                 <option value="">All Categories</option>
-                                <option value="Electronics" selected="@(Model.SelectedCategory == "Electronics")">Electronics</option>
-                                <option value="Clothing" selected="@(Model.SelectedCategory == "Clothing")">Clothing</option>
-                                <option value="Books" selected="@(Model.SelectedCategory == "Books")">Books</option>
-                                <option value="Home" selected="@(Model.SelectedCategory == "Home")">Home & Garden</option>
-                                <option value="Sports" selected="@(Model.SelectedCategory == "Sports")">Sports</option>
+                                <option value="Electronics" selected="@(Model.SelectedCategory == "Electronics" ? "selected" : null)">Electronics</option>
+                                <option value="Clothing" selected="@(Model.SelectedCategory == "Clothing" ? "selected" : null)">Clothing</option>
+                                <option value="Books" selected="@(Model.SelectedCategory == "Books" ? "selected" : null)">Books</option>
+                                <option value="Home" selected="@(Model.SelectedCategory == "Home" ? "selected" : null)">Home & Garden</option>
+                                <option value="Sports" selected="@(Model.SelectedCategory == "Sports" ? "selected" : null)">Sports</option>
                             </select>
                         </div>
+                        <input type="hidden" name="page" value="1">
                     </form>
                 </div>
             </div>
@@ -38,13 +46,29 @@
         <div class="col-md-9">
             @if (Model.Products != null && Model.Products.Any())
             {
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <small class="text-muted">
+                        Showing page @Model.CurrentPage of @Model.TotalPages
+                        (@Model.TotalCount product@(Model.TotalCount == 1 ? "" : "s"))
+                    </small>
+                </div>
                 <div class="row g-4">
                     @foreach (var product in Model.Products)
                     {
                         <div class="col-md-6 col-lg-4">
                             <div class="product-card">
                                 <div class="product-image">
-                                    <i class="fas fa-box"></i>
+                                    @if (!string.IsNullOrEmpty(product.ImageUrl))
+                                    {
+                                        <img src="@product.ImageUrl" alt="@product.Name"
+                                             style="width:100%;height:100%;object-fit:cover;"
+                                             onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+                                        <i class="fas fa-box" style="display:none;"></i>
+                                    }
+                                    else
+                                    {
+                                        <i class="fas fa-box"></i>
+                                    }
                                 </div>
                                 <div class="product-info">
                                     <span class="category-badge">@product.Category</span>
@@ -68,7 +92,12 @@
                                     <div class="mt-3 d-grid">
                                         @if (product.StockQuantity > 0)
                                         {
-                                            <button class="btn btn-primary" onclick="addToCart('@product.Id', '@product.Name', @product.Price)">
+                                            <button class="btn btn-primary add-to-cart-btn"
+                                                    data-id="@product.Id"
+                                                    data-name="@product.Name"
+                                                    data-price="@product.Price"
+                                                    data-category="@product.Category"
+                                                    data-image="@(product.ImageUrl ?? string.Empty)">
                                                 <i class="fas fa-cart-plus"></i> Add to Cart
                                             </button>
                                         }
@@ -88,14 +117,26 @@
                 <!-- Pagination -->
                 @if (Model.TotalPages > 1)
                 {
-                    <nav class="mt-4">
-                        <ul class="pagination justify-content-center">
-                            @for (int i = 1; i <= Model.TotalPages; i++)
+                    var catParam = string.IsNullOrEmpty(Model.SelectedCategory) ? "" : $"&category={Uri.EscapeDataString(Model.SelectedCategory)}";
+                    var searchParam = string.IsNullOrEmpty(Model.Search) ? "" : $"&search={Uri.EscapeDataString(Model.Search)}";
+                    <nav class="mt-4" aria-label="Product pages">
+                        <ul class="pagination justify-content-center flex-wrap">
+                            <li class="page-item @(Model.CurrentPage <= 1 ? "disabled" : "")">
+                                <a class="page-link" href="/products?page=@(Model.CurrentPage - 1)@catParam@searchParam">
+                                    <i class="fas fa-chevron-left"></i> Prev
+                                </a>
+                            </li>
+                            @for (int i = Math.Max(1, Model.CurrentPage - 2); i <= Math.Min(Model.TotalPages, Model.CurrentPage + 2); i++)
                             {
                                 <li class="page-item @(i == Model.CurrentPage ? "active" : "")">
-                                    <a class="page-link" href="/products?page=@i@(string.IsNullOrEmpty(Model.SelectedCategory) ? "" : $"&category={Model.SelectedCategory}")">@i</a>
+                                    <a class="page-link" href="/products?page=@i@catParam@searchParam">@i</a>
                                 </li>
                             }
+                            <li class="page-item @(Model.CurrentPage >= Model.TotalPages ? "disabled" : "")">
+                                <a class="page-link" href="/products?page=@(Model.CurrentPage + 1)@catParam@searchParam">
+                                    Next <i class="fas fa-chevron-right"></i>
+                                </a>
+                            </li>
                         </ul>
                     </nav>
                 }
@@ -110,26 +151,188 @@
     </div>
 </div>
 
+<!-- Variant Options Modal -->
+<div class="modal fade" id="variantModal" tabindex="-1" aria-modal="true" role="dialog">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Choose Options</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Product preview -->
+                <div class="d-flex align-items-center mb-3 gap-3">
+                    <div id="variantModalImage" style="width:64px;height:64px;background:#f8f9fa;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">
+                        <i class="fas fa-box text-muted fa-2x"></i>
+                    </div>
+                    <div>
+                        <div class="fw-semibold" id="variantModalName"></div>
+                        <div class="text-primary fw-bold" id="variantModalPrice"></div>
+                    </div>
+                </div>
+                <hr>
+                <!-- Color -->
+                <div class="mb-4">
+                    <label class="form-label fw-semibold mb-2">Color <span class="text-muted fw-normal" id="selectedColorLabel"></span></label>
+                    <div id="colorSwatches" class="d-flex flex-wrap gap-2"></div>
+                </div>
+                <!-- Size (Clothing/Sports only) -->
+                <div class="mb-2" id="sizeSection">
+                    <label class="form-label fw-semibold mb-2">Size <span class="text-muted fw-normal" id="selectedSizeLabel"></span></label>
+                    <div id="sizeButtons" class="d-flex flex-wrap gap-2"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="confirmAddToCart()">
+                    <i class="fas fa-cart-plus"></i> Add to Cart
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @section Scripts {
     <script>
-        function addToCart(productId, productName, price) {
-            let cart = JSON.parse(localStorage.getItem('cart') || '[]');
-            const existingItem = cart.find(item => item.id === productId);
-            if (existingItem) {
-                existingItem.quantity += 1;
+        const COLORS = [
+            { name: 'Black', hex: '#212529', border: '#212529' },
+            { name: 'White', hex: '#f8f9fa', border: '#ced4da' },
+            { name: 'Red',   hex: '#dc3545', border: '#dc3545' },
+            { name: 'Blue',  hex: '#0d6efd', border: '#0d6efd' },
+            { name: 'Green', hex: '#198754', border: '#198754' },
+            { name: 'Grey',  hex: '#6c757d', border: '#6c757d' },
+            { name: 'Navy',  hex: '#003087', border: '#003087' },
+            { name: 'Brown', hex: '#795548', border: '#795548' },
+        ];
+        const APPAREL_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
+        const APPAREL_CATS  = ['Clothing', 'Sports'];
+
+        let _variant = {};
+
+        // Event delegation — works for any page, no inline onclick needed
+        document.addEventListener('click', function (e) {
+            const btn = e.target.closest('.add-to-cart-btn');
+            if (!btn) return;
+            openVariantModal(
+                btn.dataset.id,
+                btn.dataset.name,
+                parseFloat(btn.dataset.price),
+                btn.dataset.category,
+                btn.dataset.image || ''
+            );
+        });
+
+        function openVariantModal(id, name, price, category, imageUrl) {
+            _variant = { id, name, price, category, color: null, size: null };
+
+            document.getElementById('variantModalName').textContent  = name;
+            document.getElementById('variantModalPrice').textContent = '$' + price.toFixed(2);
+            document.getElementById('selectedColorLabel').textContent = '';
+            document.getElementById('selectedSizeLabel').textContent  = '';
+
+            // Image preview
+            const imgBox = document.getElementById('variantModalImage');
+            if (imageUrl) {
+                const img = document.createElement('img');
+                img.src = imageUrl;
+                img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+                img.onerror = () => { imgBox.innerHTML = '<i class="fas fa-box text-muted fa-2x"></i>'; };
+                imgBox.innerHTML = '';
+                imgBox.appendChild(img);
             } else {
-                cart.push({ id: productId, name: productName, price: price, quantity: 1 });
+                imgBox.innerHTML = '<i class="fas fa-box text-muted fa-2x"></i>';
+            }
+
+            // Color swatches
+            const swatchContainer = document.getElementById('colorSwatches');
+            swatchContainer.innerHTML = '';
+            COLORS.forEach(c => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.title = c.name;
+                btn.setAttribute('aria-label', c.name);
+                btn.style.cssText = 'width:32px;height:32px;border-radius:50%;background:' + c.hex + ';border:2px solid ' + c.border + ';cursor:pointer;transition:transform .15s;';
+                btn.addEventListener('click', () => selectColor(c.name, btn));
+                swatchContainer.appendChild(btn);
+            });
+
+            // Size section
+            const needsSize = APPAREL_CATS.includes(category);
+            const sizeSection = document.getElementById('sizeSection');
+            const sizeBtnContainer = document.getElementById('sizeButtons');
+            sizeBtnContainer.innerHTML = '';
+            if (needsSize) {
+                sizeSection.style.display = '';
+                APPAREL_SIZES.forEach(s => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'btn btn-outline-secondary btn-sm';
+                    btn.style.minWidth = '48px';
+                    btn.textContent = s;
+                    btn.addEventListener('click', () => selectSize(s, btn));
+                    sizeBtnContainer.appendChild(btn);
+                });
+            } else {
+                sizeSection.style.display = 'none';
+                _variant.size = 'One Size';
+            }
+
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('variantModal')).show();
+        }
+
+        function selectColor(name, el) {
+            _variant.color = name;
+            document.getElementById('selectedColorLabel').textContent = '\u2014 ' + name;
+            document.querySelectorAll('#colorSwatches button').forEach(b => {
+                b.style.transform = '';
+                b.style.outline = '';
+            });
+            el.style.transform = 'scale(1.25)';
+            el.style.outline = '2px solid #0d6efd';
+            el.style.outlineOffset = '2px';
+        }
+
+        function selectSize(name, el) {
+            _variant.size = name;
+            document.getElementById('selectedSizeLabel').textContent = '\u2014 ' + name;
+            document.querySelectorAll('#sizeButtons button').forEach(b => {
+                b.classList.remove('btn-primary');
+                b.classList.add('btn-outline-secondary');
+            });
+            el.classList.remove('btn-outline-secondary');
+            el.classList.add('btn-primary');
+        }
+
+        function confirmAddToCart() {
+            const { id, name, price, category, color, size } = _variant;
+
+            if (!color) { alert('Please select a color.'); return; }
+            if (APPAREL_CATS.includes(category) && (!size || size === 'One Size')) {
+                alert('Please select a size.'); return;
+            }
+
+            const cartKey = id + '|' + color + '|' + (size || 'One Size');
+            let cart = JSON.parse(localStorage.getItem('cart') || '[]');
+            const existing = cart.find(item => item.cartKey === cartKey);
+            if (existing) {
+                existing.quantity += 1;
+            } else {
+                const displaySize = (size && size !== 'One Size') ? size : null;
+                cart.push({ cartKey, id, name, price, color, size: displaySize, quantity: 1 });
             }
             localStorage.setItem('cart', JSON.stringify(cart));
             updateCartBadge();
-            
-            // Show toast notification
+
+            bootstrap.Modal.getInstance(document.getElementById('variantModal')).hide();
+
+            const variantLabel = [color, (size && size !== 'One Size') ? size : null].filter(Boolean).join(', ');
             const toast = document.createElement('div');
-            toast.className = 'alert alert-success position-fixed top-0 end-0 m-3';
+            toast.className = 'alert alert-success position-fixed top-0 end-0 m-3 shadow';
             toast.style.zIndex = '9999';
-            toast.innerHTML = `<i class="fas fa-check-circle"></i> ${productName} added to cart!`;
+            toast.innerHTML = '<i class="fas fa-check-circle"></i> ' + name + (variantLabel ? ' (' + variantLabel + ')' : '') + ' added to cart!';
             document.body.appendChild(toast);
             setTimeout(() => toast.remove(), 3000);
         }
     </script>
+}
 }
