@@ -410,7 +410,12 @@ app.MapGet("/api/admin/seed", async (AppDbContext db) =>
         // Exception details are intentionally not returned to the caller.
         return Results.Problem("Seed operation failed. Check server logs.");
     }
-}).RequireAuthorization("AdminApiPolicy");
+}).RequireAuthorization(policy =>
+{
+    // Accept either Admin JWT Bearer OR the AdminCookie (set at admin login).
+    policy.AddAuthenticationSchemes("AdminCookie", "Bearer");
+    policy.RequireRole("Admin");
+});
 
 // ── Privacy & Terms clean URLs (required for Google OAuth branding) ───────────
 // Actual HTML files live in wwwroot/privacy.html and wwwroot/terms.html.

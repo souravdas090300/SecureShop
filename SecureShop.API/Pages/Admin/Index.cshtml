@@ -160,6 +160,15 @@
                                 <small class="mt-1" style="font-size: 0.8rem;">Swagger documentation</small>
                             </a>
                         </div>
+                        <div class="col-lg-3 col-md-6">
+                            <button onclick="seedProducts()" id="seedBtn" class="btn btn-outline-success w-100 d-flex flex-column align-items-center justify-content-center" style="border-radius: 12px; padding: 2rem 1rem; min-height: 140px;">
+                                <div class="mb-3" style="font-size: 2.5rem;">
+                                    <i class="fas fa-seedling"></i>
+                                </div>
+                                <div class="fw-semibold" style="font-size: 1rem;">Seed Products</div>
+                                <small class="mt-1" style="font-size: 0.8rem;">Populate sample data</small>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -324,6 +333,33 @@
             const parts = value.split(`; ${name}=`);
             if (parts.length === 2) return parts.pop().split(';').shift();
             return null;
+        }
+
+        async function seedProducts() {
+            const btn = document.getElementById('seedBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<div class="mb-3" style="font-size:2.5rem;"><i class="fas fa-spinner fa-spin"></i></div><div class="fw-semibold">Seeding...</div>';
+            try {
+                const res = await fetch(`${apiBaseUrl}/api/admin/seed`, {
+                    method: 'GET',
+                    credentials: 'include',
+                    headers: { 'Authorization': `Bearer ${getCookie('AuthToken')}` }
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    btn.innerHTML = '<div class="mb-3" style="font-size:2.5rem;"><i class="fas fa-check-circle text-success"></i></div><div class="fw-semibold">' + data.message + '</div>';
+                    btn.classList.replace('btn-outline-success', 'btn-success');
+                    loadDashboardStats();
+                } else {
+                    btn.disabled = false;
+                    btn.innerHTML = '<div class="mb-3" style="font-size:2.5rem;"><i class="fas fa-seedling"></i></div><div class="fw-semibold">Seed Products</div><small class="mt-1" style="font-size:0.8rem;">Populate sample data</small>';
+                    alert('Seed failed: ' + (data.detail || data.message || res.status));
+                }
+            } catch (e) {
+                btn.disabled = false;
+                btn.innerHTML = '<div class="mb-3" style="font-size:2.5rem;"><i class="fas fa-seedling"></i></div><div class="fw-semibold">Seed Products</div><small class="mt-1" style="font-size:0.8rem;">Populate sample data</small>';
+                alert('Error: ' + e.message);
+            }
         }
 
         // Load stats on page load
