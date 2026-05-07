@@ -45,7 +45,7 @@ public class OrdersModel : PageModel
 
             // Use Request.Scheme + Host so it works both locally and on Render
             // without needing an ApiBaseUrl config value.
-            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var baseUrl = $"http://localhost:{Environment.GetEnvironmentVariable("PORT") ?? "8080"}";
             
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 

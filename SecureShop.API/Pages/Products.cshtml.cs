@@ -52,7 +52,7 @@ public class ProductsModel : PageModel
         try
         {
             var client = _httpClientFactory.CreateClient();
-            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var baseUrl = $"http://localhost:{Environment.GetEnvironmentVariable("PORT") ?? "8080"}";
 
             var categoryParam = string.IsNullOrEmpty(SelectedCategory) ? "" : $"&category={Uri.EscapeDataString(SelectedCategory)}";
             var searchParam = string.IsNullOrEmpty(Search) ? "" : $"&search={Uri.EscapeDataString(Search)}";

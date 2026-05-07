@@ -63,7 +63,7 @@ public class LoginModel : PageModel
         try
         {
             var client = _httpClientFactory.CreateClient();
-            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var baseUrl = $"http://localhost:{Environment.GetEnvironmentVariable("PORT") ?? "8080"}";
 
             var loginData = new { email = Email, password = Password };
             var json = JsonSerializer.Serialize(loginData);

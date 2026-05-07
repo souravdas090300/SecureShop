@@ -125,7 +125,7 @@ public class CheckoutModel : PageModel
         try
         {
             var client = _httpClientFactory.CreateClient();
-            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var baseUrl = $"http://localhost:{Environment.GetEnvironmentVariable("PORT") ?? "8080"}";
 
             // Attach JWT so the Orders API can identify the user.
             var token = Request.Cookies["AuthToken"];
@@ -154,7 +154,7 @@ public class CheckoutModel : PageModel
                     PropertyNameCaseInsensitive = true
                 });
 
-                if (result?.Id != Guid.Empty)
+                if (result != null && result.Id != Guid.Empty)
                 {
                     TempData["SuccessMessage"] = $"Order #{result.Id} placed successfully!";
                     TempData["OrderId"] = result.Id.ToString();

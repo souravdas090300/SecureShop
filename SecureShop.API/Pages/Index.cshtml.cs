@@ -31,7 +31,7 @@ public class IndexModel : PageModel
         try
         {
             var client = _httpClientFactory.CreateClient();
-            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var baseUrl = $"http://localhost:{Environment.GetEnvironmentVariable("PORT") ?? "8080"}";
             
             var response = await client.GetAsync($"{baseUrl}/api/products?pageSize=8");
             if (response.IsSuccessStatusCode)

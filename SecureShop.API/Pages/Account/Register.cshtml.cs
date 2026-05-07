@@ -77,7 +77,7 @@ public class RegisterModel : PageModel
         try
         {
             var client = _httpClientFactory.CreateClient();
-            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var baseUrl = $"http://localhost:{Environment.GetEnvironmentVariable("PORT") ?? "8080"}";
 
             var registerData = new
             {
