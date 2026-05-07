@@ -8,6 +8,9 @@ using Moq;
 using SecureShop.API.Pages;
 using SecureShop.Application.DTOs.Auth;
 using SecureShop.Application.DTOs.Orders;
+using SecureShop.Application.DTOs.Products;
+using SecureShop.Application.Interfaces;
+using SecureShop.Application.Services;
 using SecureShop.Domain.Entities;
 using SecureShop.Domain.Enums;
 using SecureShop.Infrastructure.Services;
@@ -235,38 +238,43 @@ public class ProductsModelTests
 
 public class IndexModelTests
 {
-    private static IndexModel CreateModel(HttpResponseMessage fakeResponse, string? apiBase = "http://localhost:8080")
+    private static readonly Product FakeProduct =
+        Product.Create("Featured Widget", "desc", 19.99m, 3, "Books");
+
+    private static IndexModel CreateModel(
+        IEnumerable<Product>? repoProducts = null,
+        bool repoThrows = false)
     {
-        var handler = new FakeHttpMessageHandler(fakeResponse);
-        var httpClient = new HttpClient(handler);
-        var factory = new Mock<IHttpClientFactory>();
-        factory.Setup(f => f.CreateClient(It.IsAny<string>())).Returns(httpClient);
+        var repo = new Mock<IProductRepository>();
+        if (repoThrows)
+        {
+            repo.Setup(r => r.GetAllAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>()))
+                .ThrowsAsync(new Exception("db error"));
+        }
+        else
+        {
+            repo.Setup(r => r.GetAllAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>()))
+                .ReturnsAsync(repoProducts ?? Enumerable.Empty<Product>());
+            repo.Setup(r => r.CountAsync(It.IsAny<string?>(), It.IsAny<string?>()))
+                .ReturnsAsync(repoProducts?.Count() ?? 0);
+        }
 
-        var config = new Mock<IConfiguration>();
-        config.Setup(c => c["ApiBaseUrl"]).Returns(apiBase);
+        var cache = new Mock<ICacheService>();
+        cache.Setup(c => c.GetAsync<PagedProductsDto>(It.IsAny<string>()))
+             .ReturnsAsync((PagedProductsDto?)null);
+        cache.Setup(c => c.SetAsync(It.IsAny<string>(), It.IsAny<PagedProductsDto>(), It.IsAny<TimeSpan>()))
+             .Returns(Task.CompletedTask);
 
-        var model = new IndexModel(factory.Object);
+        var service = new ProductService(repo.Object, cache.Object);
+        var model = new IndexModel(service);
         PageModelTestHelper.SetupHttpContext(model);
         return model;
     }
 
     [Fact]
-    public async Task OnGetAsync_ApiReturnsSuccess_PopulatesFeaturedProducts()
+    public async Task OnGetAsync_ServiceReturnsProducts_PopulatesFeaturedProducts()
     {
-        var payload = new
-        {
-            items = new[]
-            {
-                new { id = Guid.NewGuid(), name = "Featured Widget", description = "desc",
-                      price = 19.99m, stockQuantity = 3, category = "Books",
-                      isActive = true, createdAt = DateTime.UtcNow, imageUrl = (string?)null }
-            },
-            totalCount = 1,
-            page = 1,
-            pageSize = 8,
-            totalPages = 1
-        };
-        var model = CreateModel(PageModelTestHelper.JsonOk(payload));
+        var model = CreateModel(repoProducts: new[] { FakeProduct });
 
         await model.OnGetAsync();
 
@@ -274,9 +282,9 @@ public class IndexModelTests
     }
 
     [Fact]
-    public async Task OnGetAsync_ApiReturnsError_LeavesFeaturedProductsEmpty()
+    public async Task OnGetAsync_ServiceReturnsEmpty_LeavesFeaturedProductsEmpty()
     {
-        var model = CreateModel(PageModelTestHelper.ServerError());
+        var model = CreateModel(repoProducts: Enumerable.Empty<Product>());
 
         await model.OnGetAsync();
 
@@ -284,17 +292,9 @@ public class IndexModelTests
     }
 
     [Fact]
-    public async Task OnGetAsync_HttpClientThrows_LeavesFeaturedProductsEmpty()
+    public async Task OnGetAsync_ServiceThrows_LeavesFeaturedProductsEmpty()
     {
-        var factory = new Mock<IHttpClientFactory>();
-        factory.Setup(f => f.CreateClient(It.IsAny<string>()))
-               .Throws(new HttpRequestException("network error"));
-
-        var config = new Mock<IConfiguration>();
-        config.Setup(c => c["ApiBaseUrl"]).Returns("http://localhost:8080");
-
-        var model = new IndexModel(factory.Object);
-        PageModelTestHelper.SetupHttpContext(model);
+        var model = CreateModel(repoThrows: true);
 
         await model.OnGetAsync();
 
@@ -302,31 +302,13 @@ public class IndexModelTests
     }
 
     [Fact]
-    public async Task OnGetAsync_NoApiBaseUrl_FallsBackToDefault()
+    public async Task OnGetAsync_ServiceThrows_DoesNotThrow()
     {
-        // When config["ApiBaseUrl"] is null, IndexModel falls back to localhost:8080
-        var model = CreateModel(PageModelTestHelper.ServerError(), apiBase: null);
+        var model = CreateModel(repoThrows: true);
 
-        // Should not throw - just returns empty list
         var act = async () => await model.OnGetAsync();
+
         await act.Should().NotThrowAsync();
-        model.FeaturedProducts.Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task OnGetAsync_NullJsonResult_LeavesFeaturedProductsEmpty()
-    {
-        // 200 OK with "null" body → JsonSerializer returns null → null-coalescing branch
-        var nullResponse = new HttpResponseMessage(System.Net.HttpStatusCode.OK)
-        {
-            Content = new System.Net.Http.StringContent(
-                "null", System.Text.Encoding.UTF8, "application/json")
-        };
-        var model = CreateModel(nullResponse);
-
-        await model.OnGetAsync();
-
-        model.FeaturedProducts.Should().BeEmpty();
     }
 }
 
