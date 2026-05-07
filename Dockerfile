@@ -29,6 +29,11 @@ WORKDIR /app
 
 # Non-root user for security
 RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+
+# Create App_Data directory with correct ownership before switching user
+RUN mkdir -p /app/App_Data/DataProtection-Keys \
+    && chown -R appuser:appgroup /app/App_Data
+
 USER appuser
 
 # Copy published output from build stage
