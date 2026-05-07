@@ -12,16 +12,14 @@ namespace SecureShop.API.Pages;
 public class IndexModel : PageModel
 {
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly IConfiguration _configuration;
 
     /// <summary>Featured products to display on the home page hero section.</summary>
     public List<ProductResponseDto> FeaturedProducts { get; set; } = new();
 
-    /// <summary>Injects the HTTP client factory and application configuration.</summary>
-    public IndexModel(IHttpClientFactory httpClientFactory, IConfiguration configuration)
+    /// <summary>Injects the HTTP client factory.</summary>
+    public IndexModel(IHttpClientFactory httpClientFactory)
     {
         _httpClientFactory = httpClientFactory;
-        _configuration = configuration;
     }
 
     /// <summary>
@@ -33,7 +31,7 @@ public class IndexModel : PageModel
         try
         {
             var client = _httpClientFactory.CreateClient();
-            var baseUrl = _configuration["ApiBaseUrl"] ?? "http://localhost:8080";
+            var baseUrl = $"{Request.Scheme}://{Request.Host}";
             
             var response = await client.GetAsync($"{baseUrl}/api/products?pageSize=8");
             if (response.IsSuccessStatusCode)

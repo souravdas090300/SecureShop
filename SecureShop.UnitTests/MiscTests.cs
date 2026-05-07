@@ -245,7 +245,7 @@ public class IndexModelTests
         var config = new Mock<IConfiguration>();
         config.Setup(c => c["ApiBaseUrl"]).Returns(apiBase);
 
-        var model = new IndexModel(factory.Object, config.Object);
+        var model = new IndexModel(factory.Object);
         PageModelTestHelper.SetupHttpContext(model);
         return model;
     }
@@ -293,7 +293,7 @@ public class IndexModelTests
         var config = new Mock<IConfiguration>();
         config.Setup(c => c["ApiBaseUrl"]).Returns("http://localhost:8080");
 
-        var model = new IndexModel(factory.Object, config.Object);
+        var model = new IndexModel(factory.Object);
         PageModelTestHelper.SetupHttpContext(model);
 
         await model.OnGetAsync();
