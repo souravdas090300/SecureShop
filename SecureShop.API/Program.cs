@@ -376,6 +376,42 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 // Convenience redirect: /api/swagger → /swagger
 app.MapGet("/api/swagger", () => Results.Redirect("/swagger"));
 
+// ── One-shot product seed endpoint (Admin JWT required) ──────────────────────
+// Call GET /api/admin/seed with a valid Admin Bearer token to populate samples.
+// Only inserts when the Products table is empty; safe to call multiple times.
+app.MapGet("/api/admin/seed", async (AppDbContext db) =>
+{
+    try
+    {
+        var count = await db.Set<SecureShop.Domain.Entities.Product>().CountAsync();
+        if (count > 0)
+            return Results.Ok(new { message = "Products already exist. No seed needed.", seeded = false });
+
+        var products = new[]
+        {
+            SecureShop.Domain.Entities.Product.Create("Wireless Noise-Cancelling Headphones", "Premium over-ear headphones with active noise cancellation, 30-hour battery life and foldable design.", 89.99m, 50, "Electronics", null),
+            SecureShop.Domain.Entities.Product.Create("Mechanical Gaming Keyboard", "TKL mechanical keyboard with RGB backlighting, Cherry MX switches and USB-C connectivity.", 64.99m, 35, "Electronics", null),
+            SecureShop.Domain.Entities.Product.Create("Ergonomic Office Chair", "Adjustable lumbar support, breathable mesh back and armrests. Supports up to 120 kg.", 249.99m, 12, "Home", null),
+            SecureShop.Domain.Entities.Product.Create("Running Shoes", "Lightweight trail running shoes with cushioned sole and breathable knit upper. Available in sizes 7-13.", 79.99m, 80, "Sports", null),
+            SecureShop.Domain.Entities.Product.Create("Stainless Steel Water Bottle", "1 L vacuum-insulated bottle keeps drinks cold 24 h and hot 12 h. BPA-free, leak-proof lid.", 24.99m, 200, "Sports", null),
+            SecureShop.Domain.Entities.Product.Create("The Pragmatic Programmer", "Classic software-craftsmanship book by David Thomas and Andrew Hunt. 20th anniversary edition.", 39.99m, 60, "Books", null),
+            SecureShop.Domain.Entities.Product.Create("Clean Architecture", "Robert C. Martin guide to structuring applications for long-term maintainability.", 34.99m, 45, "Books", null),
+            SecureShop.Domain.Entities.Product.Create("Slim-Fit Chino Trousers", "Stretch cotton blend, mid-rise, available in Navy, Stone and Olive. Machine washable.", 44.99m, 90, "Clothing", null),
+        };
+
+        foreach (var p in products)
+            db.Set<SecureShop.Domain.Entities.Product>().Add(p);
+
+        await db.SaveChangesAsync();
+        return Results.Ok(new { message = "Sample products seeded successfully.", seeded = true });
+    }
+    catch
+    {
+        // Exception details are intentionally not returned to the caller.
+        return Results.Problem("Seed operation failed. Check server logs.");
+    }
+}).RequireAuthorization("AdminApiPolicy");
+
 // ── Privacy & Terms clean URLs (required for Google OAuth branding) ───────────
 // Actual HTML files live in wwwroot/privacy.html and wwwroot/terms.html.
 app.MapGet("/privacy", () => Results.Redirect("/privacy.html"));
@@ -484,9 +520,19 @@ _ = Task.Run(async () =>
             }
         }
 
-        // Seed sample products if the catalogue is empty
-        var productRepo = scope.ServiceProvider.GetRequiredService<SecureShop.Application.Interfaces.IProductRepository>();
-        var existingCount = await db.Set<SecureShop.Domain.Entities.Product>().CountAsync();
+    }
+    catch (Exception ex)
+    {
+        Log.Error(ex, "Startup init: migration/seeding failed — ensure ConnectionStrings__DefaultConnection is set in Railway env vars");
+    }
+
+    // Product seeding runs in its own isolated try/catch so migration or role
+    // failures above cannot prevent the catalogue from being populated.
+    try
+    {
+        using var seedScope = app.Services.CreateScope();
+        var seedDb = seedScope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var existingCount = await seedDb.Set<SecureShop.Domain.Entities.Product>().CountAsync();
         if (existingCount == 0)
         {
             var seedProducts = new[]
@@ -494,24 +540,27 @@ _ = Task.Run(async () =>
                 SecureShop.Domain.Entities.Product.Create("Wireless Noise-Cancelling Headphones", "Premium over-ear headphones with active noise cancellation, 30-hour battery life and foldable design.", 89.99m, 50, "Electronics", null),
                 SecureShop.Domain.Entities.Product.Create("Mechanical Gaming Keyboard", "TKL mechanical keyboard with RGB backlighting, Cherry MX switches and USB-C connectivity.", 64.99m, 35, "Electronics", null),
                 SecureShop.Domain.Entities.Product.Create("Ergonomic Office Chair", "Adjustable lumbar support, breathable mesh back and armrests. Supports up to 120 kg.", 249.99m, 12, "Home", null),
-                SecureShop.Domain.Entities.Product.Create("Running Shoes — Men's", "Lightweight trail running shoes with cushioned sole and breathable knit upper. Available in sizes 7–13.", 79.99m, 80, "Sports", null),
-                SecureShop.Domain.Entities.Product.Create("Stainless Steel Water Bottle", "1 L vacuum-insulated bottle keeps drinks cold 24 h / hot 12 h. BPA-free, leak-proof lid.", 24.99m, 200, "Sports", null),
+                SecureShop.Domain.Entities.Product.Create("Running Shoes", "Lightweight trail running shoes with cushioned sole and breathable knit upper. Available in sizes 7-13.", 79.99m, 80, "Sports", null),
+                SecureShop.Domain.Entities.Product.Create("Stainless Steel Water Bottle", "1 L vacuum-insulated bottle keeps drinks cold 24 h and hot 12 h. BPA-free, leak-proof lid.", 24.99m, 200, "Sports", null),
                 SecureShop.Domain.Entities.Product.Create("The Pragmatic Programmer", "Classic software-craftsmanship book by David Thomas and Andrew Hunt. 20th anniversary edition.", 39.99m, 60, "Books", null),
-                SecureShop.Domain.Entities.Product.Create("Clean Architecture", "Robert C. Martin's guide to structuring applications for long-term maintainability.", 34.99m, 45, "Books", null),
+                SecureShop.Domain.Entities.Product.Create("Clean Architecture", "Robert C. Martin guide to structuring applications for long-term maintainability.", 34.99m, 45, "Books", null),
                 SecureShop.Domain.Entities.Product.Create("Slim-Fit Chino Trousers", "Stretch cotton blend, mid-rise, available in Navy, Stone and Olive. Machine washable.", 44.99m, 90, "Clothing", null),
             };
 
             foreach (var product in seedProducts)
-            {
-                db.Set<SecureShop.Domain.Entities.Product>().Add(product);
-            }
-            await db.SaveChangesAsync();
+                seedDb.Set<SecureShop.Domain.Entities.Product>().Add(product);
+
+            await seedDb.SaveChangesAsync();
             Log.Information("Startup init: seeded {Count} sample products", seedProducts.Length);
+        }
+        else
+        {
+            Log.Information("Startup init: {Count} products already in DB, skipping seed", existingCount);
         }
     }
     catch (Exception ex)
     {
-        Log.Error(ex, "Startup init: migration/seeding failed — ensure ConnectionStrings__DefaultConnection is set in Railway env vars");
+        Log.Error(ex, "Startup init: product seeding failed");
     }
 });
 
