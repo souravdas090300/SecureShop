@@ -33,4 +33,10 @@ public interface IAuthService
     /// <param name="dto">Contains the Google ID token from the OAuth 2.0 flow.</param>
     /// <returns>An <see cref="AuthResponseDto"/> containing the bearer token.</returns>
     Task<AuthResponseDto> GoogleSignInAsync(GoogleSignInDto dto);
+
+    /// <summary>
+    /// Generates a signed JWT for an already-verified user (e.g. after OTP confirmation).
+    /// Does not validate credentials — only call after identity has been confirmed.
+    /// </summary>
+    Task<AuthResponseDto> GenerateTokenForUserAsync(string userId);
 }

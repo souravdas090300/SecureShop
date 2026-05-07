@@ -374,12 +374,22 @@ public class AccountLoginModelTests
 
 public class AccountRegisterModelTests
 {
-    private static RegisterModel CreateModel(HttpResponseMessage response, IConfiguration? config = null)
+    private static (RegisterModel model, Mock<UserManager<ApplicationUser>> um) CreateModel(
+        HttpResponseMessage response, IConfiguration? config = null)
     {
         var handler = new FakeHttpMessageHandler(response);
         var factory = new Mock<IHttpClientFactory>();
         factory.Setup(f => f.CreateClient(It.IsAny<string>())).Returns(new HttpClient(handler));
-        return new RegisterModel(factory.Object, config ?? new Mock<IConfiguration>().Object, new Mock<ILogger<RegisterModel>>().Object);
+        var store = new Mock<IUserStore<ApplicationUser>>();
+        var um    = new Mock<UserManager<ApplicationUser>>(store.Object, null!, null!, null!, null!, null!, null!, null!, null!);
+        var email = new Mock<SecureShop.Application.Interfaces.IEmailService>();
+        var model = new RegisterModel(
+            factory.Object,
+            config ?? new Mock<IConfiguration>().Object,
+            new Mock<ILogger<RegisterModel>>().Object,
+            um.Object,
+            email.Object);
+        return (model, um);
     }
 
     private static void FillValidForm(RegisterModel model)
@@ -394,7 +404,7 @@ public class AccountRegisterModelTests
     [Fact]
     public void OnGet_CompletesWithoutError()
     {
-        var model = CreateModel(PageModelTestHelper.ServerError());
+        var (model, _) = CreateModel(PageModelTestHelper.ServerError());
         PageModelTestHelper.SetupHttpContext(model);
         model.TempData = AccountTestHelper.EmptyTempData();
 
@@ -405,7 +415,7 @@ public class AccountRegisterModelTests
     [Fact]
     public async Task OnPostAsync_InvalidModel_ReturnsPageWithErrorMessage()
     {
-        var model = CreateModel(PageModelTestHelper.ServerError());
+        var (model, _) = CreateModel(PageModelTestHelper.ServerError());
         PageModelTestHelper.SetupHttpContext(model);
         model.TempData = AccountTestHelper.EmptyTempData();
         model.ModelState.AddModelError("Email", "Required");
@@ -417,23 +427,28 @@ public class AccountRegisterModelTests
     }
 
     [Fact]
-    public async Task OnPostAsync_ApiSuccessWithJwt_SignsInAndRedirects()
+    public async Task OnPostAsync_ApiSuccessWithJwt_RedirectsToVerifyEmail()
     {
-        var jwt = AccountTestHelper.CreateJwt();
+        var jwt = AccountTestHelper.CreateJwt(email: "new@example.com");
         var payload = new { token = jwt, email = "new@example.com", firstName = "New", lastName = "User" };
-        var model = CreateModel(PageModelTestHelper.JsonOk(payload));
+        var (model, um) = CreateModel(PageModelTestHelper.JsonOk(payload));
         FillValidForm(model);
 
-        var (ctx, authSvc) = AccountTestHelper.CreateContextWithAuth();
+        // Set up UserManager to return a user so the OTP branch is taken.
+        var user = new ApplicationUser { Id = "uid-1", Email = "new@example.com", FirstName = "New", LastName = "User" };
+        um.Setup(m => m.FindByEmailAsync("new@example.com")).ReturnsAsync(user);
+        um.Setup(m => m.SetAuthenticationTokenAsync(
+            It.IsAny<ApplicationUser>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+          .ReturnsAsync(IdentityResult.Success);
+
+        var (ctx, _) = AccountTestHelper.CreateContextWithAuth();
         AccountTestHelper.SetupPageContext(model, ctx);
         model.TempData = AccountTestHelper.EmptyTempData(ctx);
 
         var result = await model.OnPostAsync();
 
-        result.Should().BeOfType<RedirectResult>();
-        authSvc.Verify(s => s.SignInAsync(
-            It.IsAny<HttpContext>(), It.IsAny<string?>(),
-            It.IsAny<ClaimsPrincipal>(), It.IsAny<AuthenticationProperties?>()), Times.Once);
+        result.Should().BeOfType<RedirectToPageResult>()
+            .Which.PageName.Should().Be("/Account/VerifyEmail");
     }
 
     [Fact]
@@ -441,7 +456,7 @@ public class AccountRegisterModelTests
     {
         // 200 OK + null token → redirects to login page (graceful fallback)
         var payload = new { token = (string?)null };
-        var model = CreateModel(PageModelTestHelper.JsonOk(payload));
+        var (model, _) = CreateModel(PageModelTestHelper.JsonOk(payload));
         FillValidForm(model);
 
         var (ctx, _) = AccountTestHelper.CreateContextWithAuth();
@@ -464,7 +479,7 @@ public class AccountRegisterModelTests
             Content = new StringContent(
                 JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
         };
-        var model = CreateModel(created);
+        var (model, _) = CreateModel(created);
         FillValidForm(model);
 
         var (ctx, _) = AccountTestHelper.CreateContextWithAuth();
@@ -486,7 +501,7 @@ public class AccountRegisterModelTests
         {
             Content = new StringContent(errorBody, Encoding.UTF8, "application/json")
         };
-        var model = CreateModel(badReq);
+        var (model, _) = CreateModel(badReq);
         FillValidForm(model);
         model.Email = "dup@example.com";
         PageModelTestHelper.SetupHttpContext(model);
@@ -505,7 +520,7 @@ public class AccountRegisterModelTests
         {
             Content = new StringContent("not json", Encoding.UTF8, "text/plain")
         };
-        var model = CreateModel(badReq);
+        var (model, _) = CreateModel(badReq);
         FillValidForm(model);
         PageModelTestHelper.SetupHttpContext(model);
         model.TempData = AccountTestHelper.EmptyTempData();
@@ -519,7 +534,7 @@ public class AccountRegisterModelTests
     [Fact]
     public async Task OnPostAsync_ApiServerError_SetsErrorMessage()
     {
-        var model = CreateModel(PageModelTestHelper.ServerError());
+        var (model, _) = CreateModel(PageModelTestHelper.ServerError());
         FillValidForm(model);
         PageModelTestHelper.SetupHttpContext(model);
         model.TempData = AccountTestHelper.EmptyTempData();
@@ -536,7 +551,15 @@ public class AccountRegisterModelTests
         var factory = new Mock<IHttpClientFactory>();
         factory.Setup(f => f.CreateClient(It.IsAny<string>()))
                .Throws(new HttpRequestException("network"));
-        var model = new RegisterModel(factory.Object, new Mock<IConfiguration>().Object, new Mock<ILogger<RegisterModel>>().Object);
+        var store = new Mock<IUserStore<ApplicationUser>>();
+        var um    = new Mock<UserManager<ApplicationUser>>(store.Object, null!, null!, null!, null!, null!, null!, null!, null!);
+        var email = new Mock<SecureShop.Application.Interfaces.IEmailService>();
+        var model = new RegisterModel(
+            factory.Object,
+            new Mock<IConfiguration>().Object,
+            new Mock<ILogger<RegisterModel>>().Object,
+            um.Object,
+            email.Object);
         FillValidForm(model);
         PageModelTestHelper.SetupHttpContext(model);
         model.TempData = AccountTestHelper.EmptyTempData();
@@ -555,7 +578,7 @@ public class AccountRegisterModelTests
         {
             Content = new StringContent("{ this is not valid json ]", Encoding.UTF8, "application/json")
         };
-        var model = CreateModel(badJson);
+        var (model, _) = CreateModel(badJson);
         FillValidForm(model);
         var (ctx, _) = AccountTestHelper.CreateContextWithAuth();
         AccountTestHelper.SetupPageContext(model, ctx);

@@ -149,6 +149,14 @@ public class AuthService : IAuthService
         }
     }
 
+    /// <inheritdoc />
+    public async Task<AuthResponseDto> GenerateTokenForUserAsync(string userId)
+    {
+        var user = await _userManager.FindByIdAsync(userId)
+            ?? throw new InvalidOperationException("User not found.");
+        return await GenerateTokenAsync(user);
+    }
+
     /// <summary>
     /// Builds and signs a JWT for the given user, embedding standard identity claims
     /// (sub, email, given_name, family_name, jti) plus all role claims.

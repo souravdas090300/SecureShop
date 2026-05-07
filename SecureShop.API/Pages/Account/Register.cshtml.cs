@@ -2,10 +2,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Identity;
 using System.ComponentModel.DataAnnotations;
 using System.Text;
 using System.Text.Json;
 using SecureShop.API.Helpers;
+using SecureShop.Application.Interfaces;
+using SecureShop.Domain.Entities;
 
 namespace SecureShop.API.Pages.Account;
 
@@ -19,6 +22,8 @@ public class RegisterModel : PageModel
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
     private readonly ILogger<RegisterModel> _logger;
+    private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IEmailService _emailService;
 
     [BindProperty]
     [Required(ErrorMessage = "First name is required")]
@@ -52,11 +57,14 @@ public class RegisterModel : PageModel
     public string? ErrorMessage { get; set; }
     public string GoogleClientId => _configuration["GoogleAuth:ClientId"] ?? "";
 
-    public RegisterModel(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<RegisterModel> logger)
+    public RegisterModel(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<RegisterModel> logger,
+        UserManager<ApplicationUser> userManager, IEmailService emailService)
     {
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
         _logger = logger;
+        _userManager = userManager;
+        _emailService = emailService;
     }
 
     public void OnGet()
@@ -102,36 +110,38 @@ public class RegisterModel : PageModel
 
                 if (result?.Token != null)
                 {
-                    // Store raw JWT for API calls made by other page models.
-                    var cookieOptions = new CookieOptions
+                    // Account created — send OTP to verify email before logging in.
+                    var user = await _userManager.FindByEmailAsync(Email);
+                    if (user != null)
                     {
-                        HttpOnly = true,
-                        Secure = Request.IsHttps,
-                        SameSite = SameSiteMode.Lax,
-                        Expires = DateTimeOffset.UtcNow.AddHours(8)
-                    };
-                    Response.Cookies.Append("AuthToken", result.Token, cookieOptions);
+                        var otp     = Random.Shared.Next(100_000, 999_999).ToString();
+                        var expiry  = DateTime.UtcNow.AddMinutes(15).ToString("O");
+                        await _userManager.SetAuthenticationTokenAsync(
+                            user, "SecureShop", "EmailVerifyOTP", $"{otp}|{expiry}");
 
-                    // Build cookie identity with standard ClaimTypes.
-                    var principal = JwtCookieHelper.BuildPrincipal(
-                        result.Token,
-                        overrideEmail:     result.Email     ?? Email,
-                        overrideFirstName: result.FirstName ?? FirstName,
-                        overrideLastName:  result.LastName  ?? LastName);
-
-                    await HttpContext.SignInAsync(
-                        CookieAuthenticationDefaults.AuthenticationScheme,
-                        principal,
-                        new AuthenticationProperties
+                        try
                         {
-                            IsPersistent = true,
-                            ExpiresUtc = DateTimeOffset.UtcNow.AddHours(8),
-                            AllowRefresh = true
-                        });
+                            await _emailService.SendAsync(
+                                Email,
+                                "Your SecureShop verification code",
+                                BuildOtpEmail(result.FirstName ?? FirstName, otp));
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "OTP email failed for {Email}", Email);
+                            // Continue — user can request a resend later.
+                        }
 
-                    _logger.LogInformation("Registration and auto-login successful for {Email}", Email);
-                    TempData["SuccessMessage"] = $"Welcome {result.FirstName ?? FirstName}! Your account has been created successfully.";
-                    return Redirect("/");
+                        TempData["PendingEmail"]   = Email;
+                        TempData["PendingUserId"]  = user.Id;
+                        TempData["PendingToken"]   = result.Token;
+                        TempData["SuccessMessage"] = $"Welcome {result.FirstName ?? FirstName}! A 6-digit verification code has been sent to {Email}.";
+                        return RedirectToPage("/Account/VerifyEmail");
+                    }
+
+                    // Fallback (user not found after creation — very unlikely)
+                    TempData["SuccessMessage"] = "Registration successful! Please sign in.";
+                    return RedirectToPage("/Account/Login");
                 }
 
                 // Registered but no token — shouldn't happen; send to login as fallback.
@@ -178,6 +188,24 @@ public class RegisterModel : PageModel
 
         return Page();
     }
+
+    private static string BuildOtpEmail(string firstName, string otp) => $"""
+        <!DOCTYPE html>
+        <html>
+        <body style="font-family:Arial,sans-serif;background:#f4f4f4;padding:20px;">
+          <div style="max-width:480px;margin:auto;background:#fff;border-radius:10px;padding:40px;">
+            <h2 style="color:#2563eb;">Verify your email</h2>
+            <p>Hi {System.Net.WebUtility.HtmlEncode(firstName)},</p>
+            <p>Use the code below to complete your SecureShop sign-up. It expires in <strong>15 minutes</strong>.</p>
+            <div style="font-size:40px;font-weight:bold;letter-spacing:12px;text-align:center;
+                        background:#f1f5f9;border-radius:8px;padding:20px 0;margin:24px 0;color:#1e293b;">
+              {otp}
+            </div>
+            <p style="color:#64748b;font-size:0.875rem;">If you didn't create an account, you can ignore this email.</p>
+          </div>
+        </body>
+        </html>
+        """;
 
     private sealed class AuthResponse
     {
