@@ -292,6 +292,9 @@ app.UseMiddleware<SecurityHeadersMiddleware>();
 // 2. Global exception handler
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
+// 3. Cache-busting headers for dynamic pages
+app.UseMiddleware<CacheBustingMiddleware>();
+
 // 3. Swagger — Enable in all environments for Railway
 app.UseSwagger();
 app.UseSwaggerUI(c =>
@@ -479,6 +482,31 @@ _ = Task.Run(async () =>
                 Log.Warning("Startup init: failed to create admin user: {Errors}", 
                     string.Join(", ", result.Errors.Select(e => e.Description)));
             }
+        }
+
+        // Seed sample products if the catalogue is empty
+        var productRepo = scope.ServiceProvider.GetRequiredService<SecureShop.Application.Interfaces.IProductRepository>();
+        var existingCount = await db.Set<SecureShop.Domain.Entities.Product>().CountAsync();
+        if (existingCount == 0)
+        {
+            var seedProducts = new[]
+            {
+                SecureShop.Domain.Entities.Product.Create("Wireless Noise-Cancelling Headphones", "Premium over-ear headphones with active noise cancellation, 30-hour battery life and foldable design.", 89.99m, 50, "Electronics", null),
+                SecureShop.Domain.Entities.Product.Create("Mechanical Gaming Keyboard", "TKL mechanical keyboard with RGB backlighting, Cherry MX switches and USB-C connectivity.", 64.99m, 35, "Electronics", null),
+                SecureShop.Domain.Entities.Product.Create("Ergonomic Office Chair", "Adjustable lumbar support, breathable mesh back and armrests. Supports up to 120 kg.", 249.99m, 12, "Home", null),
+                SecureShop.Domain.Entities.Product.Create("Running Shoes — Men's", "Lightweight trail running shoes with cushioned sole and breathable knit upper. Available in sizes 7–13.", 79.99m, 80, "Sports", null),
+                SecureShop.Domain.Entities.Product.Create("Stainless Steel Water Bottle", "1 L vacuum-insulated bottle keeps drinks cold 24 h / hot 12 h. BPA-free, leak-proof lid.", 24.99m, 200, "Sports", null),
+                SecureShop.Domain.Entities.Product.Create("The Pragmatic Programmer", "Classic software-craftsmanship book by David Thomas and Andrew Hunt. 20th anniversary edition.", 39.99m, 60, "Books", null),
+                SecureShop.Domain.Entities.Product.Create("Clean Architecture", "Robert C. Martin's guide to structuring applications for long-term maintainability.", 34.99m, 45, "Books", null),
+                SecureShop.Domain.Entities.Product.Create("Slim-Fit Chino Trousers", "Stretch cotton blend, mid-rise, available in Navy, Stone and Olive. Machine washable.", 44.99m, 90, "Clothing", null),
+            };
+
+            foreach (var product in seedProducts)
+            {
+                db.Set<SecureShop.Domain.Entities.Product>().Add(product);
+            }
+            await db.SaveChangesAsync();
+            Log.Information("Startup init: seeded {Count} sample products", seedProducts.Length);
         }
     }
     catch (Exception ex)

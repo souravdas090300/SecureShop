@@ -139,36 +139,44 @@ internal static class PageModelTestHelper
 
 public class ProductsModelTests
 {
-    private static ProductsModel CreateModel(HttpResponseMessage fakeResponse)
-    {
-        var handler = new FakeHttpMessageHandler(fakeResponse);
-        var httpClient = new HttpClient(handler);
-        var factory = new Mock<IHttpClientFactory>();
-        factory.Setup(f => f.CreateClient(It.IsAny<string>())).Returns(httpClient);
+    private static readonly Product SampleProduct =
+        Product.Create("Widget", "desc", 9.99m, 5, "Electronics");
 
-        var config = new Mock<IConfiguration>();
-        var model = new ProductsModel(factory.Object, config.Object);
+    private static ProductsModel CreateModel(
+        IEnumerable<Product>? repoProducts = null,
+        bool repoThrows = false)
+    {
+        var repo = new Mock<IProductRepository>();
+        if (repoThrows)
+        {
+            repo.Setup(r => r.GetAllAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>()))
+                .ThrowsAsync(new Exception("db error"));
+        }
+        else
+        {
+            var products = repoProducts ?? Enumerable.Empty<Product>();
+            repo.Setup(r => r.GetAllAsync(It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<int>(), It.IsAny<int>()))
+                .ReturnsAsync(products);
+            repo.Setup(r => r.CountAsync(It.IsAny<string?>(), It.IsAny<string?>()))
+                .ReturnsAsync(products.Count());
+        }
+
+        var cache = new Mock<ICacheService>();
+        cache.Setup(c => c.GetAsync<PagedProductsDto>(It.IsAny<string>()))
+             .ReturnsAsync((PagedProductsDto?)null);
+        cache.Setup(c => c.SetAsync(It.IsAny<string>(), It.IsAny<PagedProductsDto>(), It.IsAny<TimeSpan>()))
+             .Returns(Task.CompletedTask);
+
+        var service = new ProductService(repo.Object, cache.Object);
+        var model = new ProductsModel(service);
         PageModelTestHelper.SetupHttpContext(model);
         return model;
     }
 
     [Fact]
-    public async Task OnGetAsync_ApiReturnsSuccess_PopulatesProducts()
+    public async Task OnGetAsync_ServiceReturnsProducts_PopulatesProducts()
     {
-        var payload = new
-        {
-            items = new[]
-            {
-                new { id = Guid.NewGuid(), name = "Widget", description = "desc",
-                      price = 9.99m, stockQuantity = 5, category = "Electronics",
-                      isActive = true, createdAt = DateTime.UtcNow, imageUrl = (string?)null }
-            },
-            totalCount = 1,
-            page = 1,
-            pageSize = 12,
-            totalPages = 1
-        };
-        var model = CreateModel(PageModelTestHelper.JsonOk(payload));
+        var model = CreateModel(repoProducts: new[] { SampleProduct });
 
         await model.OnGetAsync(1);
 
@@ -178,9 +186,9 @@ public class ProductsModelTests
     }
 
     [Fact]
-    public async Task OnGetAsync_ApiReturnsError_LeavesProductsEmpty()
+    public async Task OnGetAsync_ServiceReturnsError_LeavesProductsEmpty()
     {
-        var model = CreateModel(PageModelTestHelper.ServerError());
+        var model = CreateModel(repoThrows: true);
 
         await model.OnGetAsync(1);
 
@@ -188,24 +196,19 @@ public class ProductsModelTests
     }
 
     [Fact]
-    public async Task OnGetAsync_HttpClientThrows_LeavesProductsEmpty()
+    public async Task OnGetAsync_ServiceThrows_DoesNotThrow()
     {
-        var factory = new Mock<IHttpClientFactory>();
-        factory.Setup(f => f.CreateClient(It.IsAny<string>()))
-               .Throws(new HttpRequestException("network error"));
+        var model = CreateModel(repoThrows: true);
 
-        var model = new ProductsModel(factory.Object, new Mock<IConfiguration>().Object);
-        PageModelTestHelper.SetupHttpContext(model);
+        var act = async () => await model.OnGetAsync(1);
 
-        await model.OnGetAsync(1);
-
-        model.Products.Should().BeEmpty();
+        await act.Should().NotThrowAsync();
     }
 
     [Fact]
     public async Task OnGetAsync_PageLessThanOne_NormalisesTo1()
     {
-        var model = CreateModel(PageModelTestHelper.ServerError());
+        var model = CreateModel(repoThrows: true);
 
         await model.OnGetAsync(0);
 
@@ -215,15 +218,7 @@ public class ProductsModelTests
     [Fact]
     public async Task OnGetAsync_EmptyItems_LeavesProductsEmpty()
     {
-        var payload = new
-        {
-            items = Array.Empty<object>(),
-            totalCount = 0,
-            page = 1,
-            pageSize = 12,
-            totalPages = 0
-        };
-        var model = CreateModel(PageModelTestHelper.JsonOk(payload));
+        var model = CreateModel(repoProducts: Enumerable.Empty<Product>());
 
         await model.OnGetAsync(1);
 
