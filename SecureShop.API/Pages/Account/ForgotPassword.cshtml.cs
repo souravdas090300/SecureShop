@@ -38,38 +38,48 @@ public class ForgotPasswordModel : PageModel
         if (!ModelState.IsValid)
             return Page();
 
-        var user = await _userManager.FindByEmailAsync(Email);
-
         // Always show the same message to avoid user enumeration.
         const string safeMessage = "If that email is registered, a 6-digit reset code has been sent.";
 
-        if (user == null)
-        {
-            InfoMessage = safeMessage;
-            return Page();
-        }
-
-        var otp    = Random.Shared.Next(100_000, 999_999).ToString();
-        var expiry = DateTime.UtcNow.AddMinutes(15).ToString("O");
-        await _userManager.SetAuthenticationTokenAsync(user, "SecureShop", "PasswordResetOTP", $"{otp}|{expiry}");
-
         try
         {
-            await _emailService.SendAsync(
-                Email,
-                "Your SecureShop password reset code",
-                BuildResetEmail(user.FirstName, otp));
+            var user = await _userManager.FindByEmailAsync(Email);
+
+            if (user == null)
+            {
+                InfoMessage = safeMessage;
+                return Page();
+            }
+
+            var otp    = Random.Shared.Next(100_000, 999_999).ToString();
+            var expiry = DateTime.UtcNow.AddMinutes(15).ToString("O");
+            await _userManager.SetAuthenticationTokenAsync(
+                user, "SecureShop", "PasswordResetOTP", $"{otp}|{expiry}");
+
+            try
+            {
+                await _emailService.SendAsync(
+                    Email,
+                    "Your SecureShop password reset code",
+                    BuildResetEmail(user.FirstName, otp));
+            }
+            catch (Exception emailEx)
+            {
+                _logger.LogWarning(emailEx, "Password reset email failed for {Email}", Email);
+            }
+
+            TempData["PendingResetEmail"] = Email;
+            InfoMessage = safeMessage;
+
+            // Redirect to OTP entry page.
+            return RedirectToPage("/Account/VerifyOtp");
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Password reset email failed for {Email}", Email);
+            _logger.LogError(ex, "ForgotPassword failed for {Email}", Email);
+            ErrorMessage = "Something went wrong. Please try again in a moment.";
+            return Page();
         }
-
-        TempData["PendingResetEmail"] = Email;
-        InfoMessage = safeMessage;
-
-        // Redirect to OTP entry page.
-        return RedirectToPage("/Account/VerifyOtp");
     }
 
     private static string BuildResetEmail(string firstName, string otp) => $"""

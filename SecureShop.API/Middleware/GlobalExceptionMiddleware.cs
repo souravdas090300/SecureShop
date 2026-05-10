@@ -43,7 +43,27 @@ public class GlobalExceptionMiddleware
             // Log the full exception including stack trace for debugging.
             _logger.LogError(ex, "Unhandled exception at {Path}: {Message} | StackTrace: {StackTrace}",
                 context.Request.Path, ex.Message, ex.StackTrace);
-            await HandleExceptionAsync(context, ex);
+
+            // API routes get a structured JSON error response.
+            // Razor Page routes get redirected back to the referring page (or home) so the
+            // user sees the form again rather than raw JSON.
+            if (context.Request.Path.StartsWithSegments("/api"))
+            {
+                await HandleExceptionAsync(context, ex);
+            }
+            else if (!context.Response.HasStarted)
+            {
+                var referer = context.Request.Headers.Referer.ToString();
+                if (!string.IsNullOrEmpty(referer) &&
+                    Uri.TryCreate(referer, UriKind.Absolute, out var refUri))
+                {
+                    context.Response.Redirect(refUri.PathAndQuery);
+                }
+                else
+                {
+                    context.Response.Redirect("/");
+                }
+            }
         }
     }
 
