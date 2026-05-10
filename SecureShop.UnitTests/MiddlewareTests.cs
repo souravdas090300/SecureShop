@@ -22,6 +22,7 @@ public class GlobalExceptionMiddlewareTests
     private static async Task<(int statusCode, JsonDocument body)> InvokeAsync(Exception toThrow)
     {
         var context = new DefaultHttpContext();
+        context.Request.Path = "/api/test";
         context.Response.Body = new MemoryStream();
 
         var next = new RequestDelegate(_ => throw toThrow);
