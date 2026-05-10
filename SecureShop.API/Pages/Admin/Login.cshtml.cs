@@ -125,15 +125,31 @@ public class AdminLoginModel : PageModel
             _logger.LogInformation("[AdminLogin] Admin signed in successfully: {Email}", Email);
 
             // Issue JWT so JS fetch calls (create/edit/delete product) can authenticate via Bearer
-            var jwtSecret = _configuration["Jwt:Secret"]!;
+            var jwtSecret = _configuration["Jwt:Secret"];
+            if (string.IsNullOrEmpty(jwtSecret))
+            {
+                _logger.LogError("[AdminLogin] Jwt:Secret is not configured");
+                ErrorMessage = "Server configuration error: JWT secret is missing. Contact the administrator.";
+                return Page();
+            }
+
+            var jwtIssuer   = _configuration["Jwt:Issuer"];
+            var jwtAudience = _configuration["Jwt:Audience"];
+            if (string.IsNullOrEmpty(jwtIssuer) || string.IsNullOrEmpty(jwtAudience))
+            {
+                _logger.LogError("[AdminLogin] Jwt:Issuer or Jwt:Audience is not configured");
+                ErrorMessage = "Server configuration error: JWT issuer/audience is missing. Contact the administrator.";
+                return Page();
+            }
+
             var tokenHandler = new JwtSecurityTokenHandler();
             var key = System.Text.Encoding.UTF8.GetBytes(jwtSecret);
             var tokenDescriptor = new Microsoft.IdentityModel.Tokens.SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(claims),
                 Expires = DateTime.UtcNow.AddHours(8),
-                Issuer = _configuration["Jwt:Issuer"],
-                Audience = _configuration["Jwt:Audience"],
+                Issuer = jwtIssuer,
+                Audience = jwtAudience,
                 SigningCredentials = new Microsoft.IdentityModel.Tokens.SigningCredentials(
                     new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(key),
                     Microsoft.IdentityModel.Tokens.SecurityAlgorithms.HmacSha256Signature)
@@ -155,8 +171,9 @@ public class AdminLoginModel : PageModel
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[AdminLogin] Login failed for: {Email}", Email);
-            ErrorMessage = "An error occurred during login. Please try again.";
+            _logger.LogError(ex, "[AdminLogin] Login failed for {Email}. Type: {ExType} | Message: {ExMsg}",
+                Email, ex.GetType().Name, ex.Message);
+            ErrorMessage = $"Login failed ({ex.GetType().Name}). Check server logs for details.";
             return Page();
         }
     }
