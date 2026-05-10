@@ -171,9 +171,26 @@ public class AdminLoginModel : PageModel
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[AdminLogin] Login failed for {Email}. Type: {ExType} | Message: {ExMsg}",
-                Email, ex.GetType().Name, ex.Message);
-            ErrorMessage = $"Login failed ({ex.GetType().Name}). Check server logs for details.";
+            // Build full exception chain for diagnostics (SocketException is often an inner exception).
+            var innerChain = ex.InnerException is not null
+                ? $" | Inner: [{ex.InnerException.GetType().Name}] {ex.InnerException.Message}"
+                : string.Empty;
+
+            _logger.LogError(ex,
+                "[AdminLogin] Login failed for {Email}. Type: {ExType} | Message: {ExMsg}{Inner}",
+                Email, ex.GetType().Name, ex.Message, innerChain);
+
+            // SocketException (or Npgsql wrapping one) means the DB server is temporarily unreachable.
+            // On Neon free tier this happens after the instance auto-pauses.
+            bool isSocketError = ex is System.Net.Sockets.SocketException
+                || ex.InnerException is System.Net.Sockets.SocketException
+                || ex.Message.Contains("socket", StringComparison.OrdinalIgnoreCase)
+                || ex.Message.Contains("connection", StringComparison.OrdinalIgnoreCase);
+
+            ErrorMessage = isSocketError
+                ? "Database connection failed. The server may be waking up — please wait a few seconds and try again."
+                : $"Login failed ({ex.GetType().Name}). Check server logs for details.";
+
             return Page();
         }
     }
