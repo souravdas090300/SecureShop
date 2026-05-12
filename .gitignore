@@ -53,8 +53,7 @@ CodeCoverage/
 TestResult.xml
 nunit-*.xml
 
-# Local environment and secret override files — never commit any appsettings with secrets
-appsettings.json
+# Local environment and secret override files — never commit environment-specific appsettings
 appsettings.Development.json
 appsettings.Production.json
 appsettings.*.json

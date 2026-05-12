@@ -39,12 +39,15 @@ USER appuser
 # Copy published output from build stage
 COPY --from=build /app/publish .
 
+# Railway sets PORT automatically — declare ARG so Docker doesn't warn about undefined var
+ARG PORT=8080
+
 # Railway sets PORT automatically — Kestrel must listen on it
 ENV ASPNETCORE_URLS=http://+:${PORT:-8080}
 ENV ASPNETCORE_ENVIRONMENT=Production
 
 # Health check so Railway knows when the container is ready
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-8080}/health || exit 1
 
 EXPOSE 8080
