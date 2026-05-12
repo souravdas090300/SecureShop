@@ -53,8 +53,11 @@ CodeCoverage/
 TestResult.xml
 nunit-*.xml
 
-# Local environment and secret override files
+# Local environment and secret override files — never commit any appsettings with secrets
+appsettings.json
 appsettings.Development.json
+appsettings.Production.json
+appsettings.*.json
 .env
 .env.*
 SecureShop.API/appsettings.Local.json
