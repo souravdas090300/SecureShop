@@ -7,7 +7,12 @@ public class AdminSettingsModel : AdminPageModel
     [TempData]
     public string? SuccessMessage { get; set; }
 
-    public void OnGet() { }
+    public string StoreUrl { get; set; } = string.Empty;
+
+    public void OnGet()
+    {
+        StoreUrl = $"{Request.Scheme}://{Request.Host}";
+    }
 
     public IActionResult OnPostSaveGeneral()
     {

@@ -54,7 +54,7 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Store URL</label>
-                            <input type="text" class="form-control" value="@($"{Context.Request.Scheme}://{Context.Request.Host}")" readonly />
+                            <input type="text" class="form-control" value="@Model.StoreUrl" readonly />
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold">Default Currency</label>
@@ -152,7 +152,7 @@
                 <div class="row g-3">
                     <div class="col-12">
                         <label class="form-label fw-semibold">Allowed Origins</label>
-                        <textarea class="form-control font-monospace" rows="3" readonly>@($"{Context.Request.Scheme}://{Context.Request.Host}")</textarea>
+                        <textarea class="form-control font-monospace" rows="3" readonly>@Model.StoreUrl</textarea>
                         <div class="form-text">Configured via environment variables.</div>
                     </div>
                 </div>
