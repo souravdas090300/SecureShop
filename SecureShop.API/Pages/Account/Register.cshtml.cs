@@ -143,16 +143,19 @@ public class RegisterModel : PageModel
                             return RedirectToPage("/Account/VerifyEmail");
                         }
 
-                        // Email delivery failed — auto-confirm the account so the user isn't stuck.
+                        // Email delivery failed — auto-confirm and sign the user in directly.
                         user.EmailConfirmed = true;
                         await _userManager.UpdateAsync(user);
-                        TempData["SuccessMessage"] = $"Welcome {result.FirstName ?? FirstName}! Your account has been created. Please sign in.";
-                        return RedirectToPage("/Account/Login");
+                        await SignInWithTokenAsync(result.Token, result.FirstName, result.LastName, result.Email);
+                        TempData["SuccessMessage"] = $"Welcome {result.FirstName ?? FirstName}! Your account has been created.";
+                        return Redirect("/");
                     }
 
                     // Fallback (user not found after creation — very unlikely)
-                    TempData["SuccessMessage"] = "Registration successful! Please sign in.";
-                    return RedirectToPage("/Account/Login");
+                    // We still have the token so sign in directly.
+                    await SignInWithTokenAsync(result.Token, result.FirstName, result.LastName, result.Email);
+                    TempData["SuccessMessage"] = "Registration successful! Welcome to SecureShop.";
+                    return Redirect("/");
                 }
 
                 // Registered but no token — shouldn't happen; send to login as fallback.
@@ -229,5 +232,33 @@ public class RegisterModel : PageModel
     private sealed class ErrorResponse
     {
         public string? Message { get; set; }
+    }
+
+    private async Task SignInWithTokenAsync(string token, string? firstName, string? lastName, string? email)
+    {
+        var cookieOptions = new CookieOptions
+        {
+            HttpOnly = true,
+            Secure   = Request.IsHttps,
+            SameSite = SameSiteMode.Lax,
+            Expires  = DateTimeOffset.UtcNow.AddHours(8)
+        };
+        Response.Cookies.Append("AuthToken", token, cookieOptions);
+
+        var principal = JwtCookieHelper.BuildPrincipal(
+            token,
+            overrideEmail:     email,
+            overrideFirstName: firstName,
+            overrideLastName:  lastName);
+
+        await HttpContext.SignInAsync(
+            CookieAuthenticationDefaults.AuthenticationScheme,
+            principal,
+            new AuthenticationProperties
+            {
+                IsPersistent = true,
+                ExpiresUtc   = DateTimeOffset.UtcNow.AddHours(8),
+                AllowRefresh = true
+            });
     }
 }
