@@ -56,6 +56,7 @@ public class ForgotPasswordModel : PageModel
             await _userManager.SetAuthenticationTokenAsync(
                 user, "SecureShop", "PasswordResetOTP", $"{otp}|{expiry}");
 
+            bool emailSent = true;
             try
             {
                 await _emailService.SendAsync(
@@ -66,6 +67,16 @@ public class ForgotPasswordModel : PageModel
             catch (Exception emailEx)
             {
                 _logger.LogWarning(emailEx, "Password reset email failed for {Email}", Email);
+                emailSent = false;
+            }
+
+            if (!emailSent)
+            {
+                // Email delivery failed — don't redirect to OTP page (user has no code).
+                // Remove the stored token to avoid orphaned DB entries.
+                await _userManager.RemoveAuthenticationTokenAsync(user, "SecureShop", "PasswordResetOTP");
+                ErrorMessage = "We were unable to send a reset code to that email address. Please try again in a moment.";
+                return Page();
             }
 
             TempData["PendingResetEmail"] = Email;

@@ -161,6 +161,11 @@ public class CheckoutModel : PageModel
                     return RedirectToPage("/Account/Orders");
                 }
             }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                _logger.LogWarning("Order creation returned 401 for user {Email} — AuthToken missing or expired", Email);
+                ErrorMessage = "Your session has expired. Please log out and log in again, then try checking out.";
+            }
             else
             {
                 var errorContent = await response.Content.ReadAsStringAsync();

@@ -699,20 +699,35 @@ public class AdminPageModelFilterTests
             model);
     }
 
-    [Fact]
-    public void OnPageHandlerExecuting_AuthFails_RedirectsToAdminLogin()
+    // Minimal next-delegate that signals the handler was invoked.
+    private static PageHandlerExecutionDelegate BuildNextDelegate(
+        PageContext pageContext, object handlerInstance, bool[] invoked)
     {
-        var (ctx, model) = CreateWithAuthResult(AuthenticateResult.Fail("not authenticated"));
-        var filterCtx    = BuildFilterContext(model, ctx);
-
-        model.OnPageHandlerExecuting(filterCtx);
-
-        filterCtx.Result.Should().BeOfType<RedirectResult>()
-            .Which.Url.Should().Be("/admin/login");
+        return () =>
+        {
+            invoked[0] = true;
+            var executed = new PageHandlerExecutedContext(
+                pageContext, new List<IFilterMetadata>(), null!, handlerInstance);
+            return Task.FromResult(executed);
+        };
     }
 
     [Fact]
-    public void OnPageHandlerExecuting_AuthSucceedsNoAdminRole_RedirectsToAdminLogin()
+    public async Task OnPageHandlerExecutionAsync_AuthFails_RedirectsToAdminLogin()
+    {
+        var (ctx, model) = CreateWithAuthResult(AuthenticateResult.Fail("not authenticated"));
+        var filterCtx    = BuildFilterContext(model, ctx);
+        var invoked      = new bool[1];
+
+        await model.OnPageHandlerExecutionAsync(filterCtx, BuildNextDelegate(model.PageContext, model, invoked));
+
+        filterCtx.Result.Should().BeOfType<RedirectResult>()
+            .Which.Url.Should().Be("/admin/login");
+        invoked[0].Should().BeFalse("next() must not be called when access is denied");
+    }
+
+    [Fact]
+    public async Task OnPageHandlerExecutionAsync_AuthSucceedsNoAdminRole_RedirectsToAdminLogin()
     {
         var identity  = new ClaimsIdentity(new[] { new Claim(ClaimTypes.Name, "Regular") }, "AdminCookie");
         var principal = new ClaimsPrincipal(identity);
@@ -720,15 +735,17 @@ public class AdminPageModelFilterTests
 
         var (ctx, model) = CreateWithAuthResult(AuthenticateResult.Success(ticket));
         var filterCtx    = BuildFilterContext(model, ctx);
+        var invoked      = new bool[1];
 
-        model.OnPageHandlerExecuting(filterCtx);
+        await model.OnPageHandlerExecutionAsync(filterCtx, BuildNextDelegate(model.PageContext, model, invoked));
 
         filterCtx.Result.Should().BeOfType<RedirectResult>()
             .Which.Url.Should().Be("/admin/login");
+        invoked[0].Should().BeFalse("next() must not be called when role check fails");
     }
 
     [Fact]
-    public void OnPageHandlerExecuting_AuthSucceedsWithAdminRole_SetsAdminName()
+    public async Task OnPageHandlerExecutionAsync_AuthSucceedsWithAdminRole_SetsAdminName()
     {
         var identity = new ClaimsIdentity(
             new[] { new Claim(ClaimTypes.Role, "Admin"), new Claim(ClaimTypes.Name, "Admin User") },
@@ -738,15 +755,17 @@ public class AdminPageModelFilterTests
 
         var (ctx, model) = CreateWithAuthResult(AuthenticateResult.Success(ticket));
         var filterCtx    = BuildFilterContext(model, ctx);
+        var invoked      = new bool[1];
 
-        model.OnPageHandlerExecuting(filterCtx);
+        await model.OnPageHandlerExecutionAsync(filterCtx, BuildNextDelegate(model.PageContext, model, invoked));
 
         filterCtx.Result.Should().BeNull();
         model.AdminName.Should().Be("Admin User");
+        invoked[0].Should().BeTrue("next() must be called for an authorised admin");
     }
 
     [Fact]
-    public void OnPageHandlerExecuting_AuthSucceedsAdminRoleNoName_SetsDefaultAdminName()
+    public async Task OnPageHandlerExecutionAsync_AuthSucceedsAdminRoleNoName_SetsDefaultAdminName()
     {
         // Admin role present but no Name claim → Identity.Name is null → uses "Administrator"
         var identity  = new ClaimsIdentity(new[] { new Claim(ClaimTypes.Role, "Admin") }, "AdminCookie");
@@ -755,10 +774,12 @@ public class AdminPageModelFilterTests
 
         var (ctx, model) = CreateWithAuthResult(AuthenticateResult.Success(ticket));
         var filterCtx    = BuildFilterContext(model, ctx);
+        var invoked      = new bool[1];
 
-        model.OnPageHandlerExecuting(filterCtx);
+        await model.OnPageHandlerExecutionAsync(filterCtx, BuildNextDelegate(model.PageContext, model, invoked));
 
         filterCtx.Result.Should().BeNull();
         model.AdminName.Should().Be("Administrator");
+        invoked[0].Should().BeTrue("next() must be called for an authorised admin");
     }
 }

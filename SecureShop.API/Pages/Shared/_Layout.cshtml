@@ -235,7 +235,12 @@
                                         <li><a class="dropdown-item text-primary fw-bold" href="/admin"><i class="fas fa-shield-alt"></i> Admin Dashboard</a></li>
                                     }
                                     <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="/account/logout"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+                                    <li>
+                                        <form id="user-logout-form" method="post" action="/account/logout" style="display:none">
+                                            @Html.AntiForgeryToken()
+                                        </form>
+                                        <a class="dropdown-item" href="#" onclick="event.preventDefault();document.getElementById('user-logout-form').submit();"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                                    </li>
                                 </ul>
                             </div>
                         </li>

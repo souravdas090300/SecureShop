@@ -22,11 +22,12 @@ public class AdminPageModel : PageModel
     /// <summary>
     /// Validates the <c>AdminCookie</c> identity before any page handler runs.
     /// Redirects to the admin login page when the user is not authenticated or lacks the Admin role.
+    /// Uses the async override to avoid blocking thread-pool threads (sync-over-async).
     /// </summary>
-    public override void OnPageHandlerExecuting(PageHandlerExecutingContext context)
+    public override async Task OnPageHandlerExecutionAsync(
+        PageHandlerExecutingContext context, PageHandlerExecutionDelegate next)
     {
-        var result = context.HttpContext
-            .AuthenticateAsync("AdminCookie").GetAwaiter().GetResult();
+        var result = await context.HttpContext.AuthenticateAsync("AdminCookie");
 
         if (!result.Succeeded || result.Principal?.IsInRole("Admin") != true)
         {
@@ -36,6 +37,6 @@ public class AdminPageModel : PageModel
         }
 
         AdminName = result.Principal.Identity?.Name ?? "Administrator";
-        base.OnPageHandlerExecuting(context);
+        await next();
     }
 }

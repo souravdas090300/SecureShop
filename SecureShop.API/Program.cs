@@ -338,22 +338,6 @@ app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// Add middleware to debug authentication on every request
-app.Use(async (context, next) =>
-{
-    Console.WriteLine($"[Middleware] Request: {context.Request.Method} {context.Request.Path}");
-    Console.WriteLine($"[Middleware] Cookies count: {context.Request.Cookies.Count}");
-    foreach (var cookie in context.Request.Cookies)
-    {
-        Console.WriteLine($"[Middleware] Cookie: {cookie.Key} = {cookie.Value.Substring(0, Math.Min(20, cookie.Value.Length))}...");
-    }
-    Console.WriteLine($"[Middleware] BEFORE next() - IsAuthenticated: {context.User?.Identity?.IsAuthenticated}");
-    
-    await next();
-    
-    Console.WriteLine($"[Middleware] AFTER next() - IsAuthenticated: {context.User?.Identity?.IsAuthenticated}");
-});
-
 // ── Endpoints ─────────────────────────────────────────────────────────────────
 // Map API controllers under /api prefix
 app.MapControllers();
@@ -442,7 +426,7 @@ app.MapGet("/api/status", () =>
     return Results.Json(response);
 });
 
-// Debug endpoint to check authentication status
+// Authentication status endpoint (requires auth — no unauthenticated access to claim data)
 app.MapGet("/api/auth/status", (HttpContext context) =>
 {
     var isAuthenticated = context.User?.Identity?.IsAuthenticated ?? false;
@@ -460,7 +444,7 @@ app.MapGet("/api/auth/status", (HttpContext context) =>
         claimsCount = claims?.Count ?? 0,
         claims
     });
-});
+}).RequireAuthorization();
 
 // ── Database migration & seeding (background — runs AFTER Kestrel starts) ────
 // Running MigrateAsync before app.Run() blocks the port from opening, causing
