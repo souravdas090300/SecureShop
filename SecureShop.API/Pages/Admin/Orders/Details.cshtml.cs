@@ -21,7 +21,7 @@ public class AdminOrderDetailsModel : AdminPageModel
     /// <summary>Populates API base URL and order ID for the view.</summary>
     public void OnGet(string id)
     {
-        ApiBaseUrl = _configuration["ApiBaseUrl"] ?? "http://localhost:8080";
+        ApiBaseUrl = _configuration["ApiBaseUrl"] ?? $"{Request.Scheme}://{Request.Host}";
         OrderId = id;
     }
 }

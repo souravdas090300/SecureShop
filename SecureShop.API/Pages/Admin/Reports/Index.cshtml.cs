@@ -6,5 +6,5 @@ public class AdminReportsModel : AdminPageModel
     public string ApiBaseUrl { get; set; } = string.Empty;
 
     public AdminReportsModel(IConfiguration configuration) => _configuration = configuration;
-    public void OnGet() => ApiBaseUrl = _configuration["ApiBaseUrl"] ?? "http://localhost:8080";
+    public void OnGet() => ApiBaseUrl = _configuration["ApiBaseUrl"] ?? $"{Request.Scheme}://{Request.Host}";
 }

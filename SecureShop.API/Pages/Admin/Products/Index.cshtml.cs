@@ -28,7 +28,7 @@ public class AdminProductsModel : AdminPageModel
     /// <summary>Resolves the API base URL and reads any pending TempData success message.</summary>
     public void OnGet()
     {
-        ApiBaseUrl = _configuration["ApiBaseUrl"] ?? "http://localhost:8080";
+        ApiBaseUrl = _configuration["ApiBaseUrl"] ?? $"{Request.Scheme}://{Request.Host}";
         SuccessMessage = TempData["SuccessMessage"] as string;
     }
 }

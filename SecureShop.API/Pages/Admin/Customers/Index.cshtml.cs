@@ -15,5 +15,5 @@ public class AdminCustomersModel : AdminPageModel
     public AdminCustomersModel(IConfiguration configuration) => _configuration = configuration;
 
     /// <summary>Resolves the API base URL on page load.</summary>
-    public void OnGet() => ApiBaseUrl = _configuration["ApiBaseUrl"] ?? "http://localhost:8080";
+    public void OnGet() => ApiBaseUrl = _configuration["ApiBaseUrl"] ?? $"{Request.Scheme}://{Request.Host}";
 }

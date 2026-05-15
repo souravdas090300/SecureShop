@@ -28,7 +28,7 @@ public class AdminProductEditModel : AdminPageModel
     /// <summary>Resolves API and Cloudinary configuration values and the product ID for the view.</summary>
     public void OnGet(string id)
     {
-        ApiBaseUrl   = _configuration["ApiBaseUrl"]               ?? "http://localhost:8080";
+        ApiBaseUrl   = _configuration["ApiBaseUrl"] ?? $"{Request.Scheme}://{Request.Host}";
         ProductId    = id;
         CloudName    = _configuration["Cloudinary:CloudName"]     ?? "";
         UploadPreset = _configuration["Cloudinary:UploadPreset"]  ?? "";

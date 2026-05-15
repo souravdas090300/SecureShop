@@ -26,6 +26,6 @@ public class AdminIndexModel : AdminPageModel
     public void OnGet()
     {
         // AdminName is set by base class OnPageHandlerExecuting
-        ApiBaseUrl = _configuration["ApiBaseUrl"] ?? "http://localhost:8080";
+        ApiBaseUrl = _configuration["ApiBaseUrl"] ?? $"{Request.Scheme}://{Request.Host}";
     }
 }
