@@ -516,6 +516,7 @@ Pages/
   Customers/Index.cshtml
   Index.cshtml
   Login.cshtml
+  Logout.cshtml
   Orders/
    Details.cshtml
    Index.cshtml
@@ -558,6 +559,7 @@ Pages/
   Customers/Index.cshtml
   Index.cshtml
   Login.cshtml
+  Logout.cshtml
   Orders/
    Details.cshtml
    Index.cshtml
