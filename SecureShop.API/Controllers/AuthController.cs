@@ -6,6 +6,7 @@ using System.Security.Claims;
 using SecureShop.Application.DTOs.Auth;
 using SecureShop.Application.Interfaces;
 using SecureShop.Domain.Entities;
+using SecureShop.Domain.Exceptions;
 
 namespace SecureShop.API.Controllers;
 
@@ -86,6 +87,11 @@ public class AuthController : ControllerBase
             var result = await _authService.LoginAsync(dto);
             _logger.LogInformation("Login successful for email: {Email}", dto.Email);
             return Ok(result);
+        }
+        catch (DomainException ex)
+        {
+            _logger.LogWarning("Login failed for {Email}: {Message}", dto.Email, ex.Message);
+            return Unauthorized(new { message = ex.Message });
         }
         catch (UnauthorizedAccessException ex)
         {

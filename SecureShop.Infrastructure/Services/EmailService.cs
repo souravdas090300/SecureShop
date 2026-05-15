@@ -42,10 +42,14 @@ public class EmailService : IEmailService
         message.IsBodyHtml = true;
         message.To.Add(toEmail);
 
+        // Port 465 uses implicit SSL; port 587 uses STARTTLS.
+        // Railway blocks outbound 587 on free tier — prefer 465.
         using var smtp = new SmtpClient(host, port)
         {
-            EnableSsl   = true,
-            Credentials = new NetworkCredential(user, password)
+            EnableSsl   = port != 587,
+            Credentials = new NetworkCredential(user, password),
+            DeliveryMethod = SmtpDeliveryMethod.Network,
+            Timeout = 10000
         };
 
         await smtp.SendMailAsync(message);

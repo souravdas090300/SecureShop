@@ -65,7 +65,11 @@ if (!string.IsNullOrWhiteSpace(redisConnStr))
     // Store keys in Redis so they survive container restarts on Railway
     try
     {
-        var redisForDp = StackExchange.Redis.ConnectionMultiplexer.Connect(redisConnStr);
+        // abortConnect=false prevents startup crash if Redis is temporarily unavailable
+    var dpRedisStr = redisConnStr.Contains("abortConnect", StringComparison.OrdinalIgnoreCase)
+        ? redisConnStr
+        : redisConnStr + ",abortConnect=false";
+    var redisForDp = StackExchange.Redis.ConnectionMultiplexer.Connect(dpRedisStr);
         dpBuilder.PersistKeysToStackExchangeRedis(redisForDp, "SecureShop:DataProtection:Keys");
         Console.WriteLine("[STARTUP] Data Protection keys stored in Redis");
     }
