@@ -1,0 +1,287 @@
+@page
+@model AdminSettingsModel
+@{
+    ViewData["Title"] = "Settings";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-1" style="color: #1e293b;">Settings</h2>
+        <p class="text-muted mb-0">Manage your store configuration.</p>
+    </div>
+</div>
+
+<!-- Settings tabs -->
+<ul class="nav nav-tabs mb-4" id="settingsTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="general-tab" data-bs-toggle="tab" data-bs-target="#general" type="button" role="tab">
+            <i class="fas fa-store me-2"></i>General
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="security-tab" data-bs-toggle="tab" data-bs-target="#security" type="button" role="tab">
+            <i class="fas fa-shield-alt me-2"></i>Security
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="notifications-tab" data-bs-toggle="tab" data-bs-target="#notifications" type="button" role="tab">
+            <i class="fas fa-bell me-2"></i>Notifications
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="system-tab" data-bs-toggle="tab" data-bs-target="#system" type="button" role="tab">
+            <i class="fas fa-server me-2"></i>System
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="settingsTabContent">
+
+    <!-- General -->
+    <div class="tab-pane fade show active" id="general" role="tabpanel">
+        <form method="post" asp-page-handler="SaveGeneral">
+            @Html.AntiForgeryToken()
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white py-3">
+                    <h6 class="mb-0 fw-semibold"><i class="fas fa-store me-2 text-primary"></i>Store Information</h6>
+                </div>
+                <div class="card-body p-4">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Store Name</label>
+                            <input type="text" class="form-control" value="SecureShop" readonly />
+                            <div class="form-text">Configured via environment variables.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Store URL</label>
+                            <input type="text" class="form-control" value="@($"{Context.Request.Scheme}://{Context.Request.Host}")" readonly />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Default Currency</label>
+                            <input type="text" class="form-control" value="USD ($)" readonly />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Timezone</label>
+                            <input type="text" class="form-control" value="UTC" readonly />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white py-3">
+                    <h6 class="mb-0 fw-semibold"><i class="fas fa-shopping-cart me-2 text-success"></i>Order Settings</h6>
+                </div>
+                <div class="card-body p-4">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Minimum Order Amount</label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <input type="number" class="form-control" value="0" min="0" step="0.01" />
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Free Shipping Threshold</label>
+                            <div class="input-group">
+                                <span class="input-group-text">$</span>
+                                <input type="number" class="form-control" value="50" min="0" step="0.01" />
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="guestCheckout" checked />
+                                <label class="form-check-label fw-semibold" for="guestCheckout">Allow guest checkout</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="stockAlerts" checked />
+                                <label class="form-check-label fw-semibold" for="stockAlerts">Enable low stock alerts</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end">
+                <button type="submit" class="btn btn-primary px-4">
+                    <i class="fas fa-save me-2"></i>Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Security -->
+    <div class="tab-pane fade" id="security" role="tabpanel">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-semibold"><i class="fas fa-lock me-2 text-danger"></i>Authentication</h6>
+            </div>
+            <div class="card-body p-4">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Session Timeout (minutes)</label>
+                        <input type="number" class="form-control" value="60" min="5" max="1440" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Max Login Attempts</label>
+                        <input type="number" class="form-control" value="5" min="1" max="20" />
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="require2fa" />
+                            <label class="form-check-label fw-semibold" for="require2fa">Require two-factor authentication for admins</label>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="emailVerification" checked />
+                            <label class="form-check-label fw-semibold" for="emailVerification">Require email verification for new accounts</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-semibold"><i class="fas fa-network-wired me-2 text-warning"></i>CORS &amp; API</h6>
+            </div>
+            <div class="card-body p-4">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Allowed Origins</label>
+                        <textarea class="form-control font-monospace" rows="3" readonly>@($"{Context.Request.Scheme}://{Context.Request.Host}")</textarea>
+                        <div class="form-text">Configured via environment variables.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-end">
+            <button class="btn btn-primary px-4" disabled>
+                <i class="fas fa-save me-2"></i>Save Changes
+            </button>
+        </div>
+        <p class="text-muted text-end mt-2" style="font-size:0.85rem;">Security settings are managed via environment variables in production.</p>
+    </div>
+
+    <!-- Notifications -->
+    <div class="tab-pane fade" id="notifications" role="tabpanel">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-semibold"><i class="fas fa-envelope me-2 text-info"></i>Email Notifications</h6>
+            </div>
+            <div class="card-body p-4">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="notifyNewOrder" checked />
+                            <label class="form-check-label fw-semibold" for="notifyNewOrder">New order placed</label>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="notifyLowStock" checked />
+                            <label class="form-check-label fw-semibold" for="notifyLowStock">Low stock alert</label>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="notifyNewUser" />
+                            <label class="form-check-label fw-semibold" for="notifyNewUser">New customer registered</label>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="notifyRefund" checked />
+                            <label class="form-check-label fw-semibold" for="notifyRefund">Refund requested</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-end">
+            <button class="btn btn-primary px-4" disabled>
+                <i class="fas fa-save me-2"></i>Save Changes
+            </button>
+        </div>
+        <p class="text-muted text-end mt-2" style="font-size:0.85rem;">Notification preferences coming soon.</p>
+    </div>
+
+    <!-- System -->
+    <div class="tab-pane fade" id="system" role="tabpanel">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-semibold"><i class="fas fa-info-circle me-2 text-secondary"></i>System Information</h6>
+            </div>
+            <div class="card-body p-4">
+                <dl class="row mb-0">
+                    <dt class="col-sm-4 text-muted">Application</dt>
+                    <dd class="col-sm-8">SecureShop</dd>
+
+                    <dt class="col-sm-4 text-muted">Runtime</dt>
+                    <dd class="col-sm-8">@System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription</dd>
+
+                    <dt class="col-sm-4 text-muted">OS</dt>
+                    <dd class="col-sm-8">@System.Runtime.InteropServices.RuntimeInformation.OSDescription</dd>
+
+                    <dt class="col-sm-4 text-muted">Server Time (UTC)</dt>
+                    <dd class="col-sm-8" id="serverTime">@DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss") UTC</dd>
+
+                    <dt class="col-sm-4 text-muted">Environment</dt>
+                    <dd class="col-sm-8">
+                        @{
+                            var env = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production";
+                        }
+                        <span class="badge @(env == "Development" ? "bg-warning text-dark" : "bg-success")">@env</span>
+                    </dd>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-semibold"><i class="fas fa-database me-2 text-primary"></i>Cache</h6>
+            </div>
+            <div class="card-body p-4">
+                <p class="text-muted mb-3">Application cache is backed by Redis (Upstash). Clearing it forces all pages to reload data from the database on next request.</p>
+                <button class="btn btn-outline-warning" onclick="clearCache(this)">
+                    <i class="fas fa-trash-alt me-2"></i>Clear Application Cache
+                </button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+@section Scripts {
+<script>
+    function clearCache(btn) {
+        if (!confirm('Clear the application cache? The next page loads will be slower while the cache warms up.')) return;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Clearing...';
+        fetch('/api/admin/cache/clear', {
+            method: 'POST',
+            headers: { 'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '' }
+        })
+        .then(r => {
+            if (r.ok) {
+                btn.className = 'btn btn-outline-success';
+                btn.innerHTML = '<i class="fas fa-check me-2"></i>Cache Cleared';
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-trash-alt me-2"></i>Clear Application Cache';
+                alert('Cache clear failed. Try again.');
+            }
+        })
+        .catch(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-trash-alt me-2"></i>Clear Application Cache';
+            alert('Request failed. Try again.');
+        });
+    }
+</script>
+}

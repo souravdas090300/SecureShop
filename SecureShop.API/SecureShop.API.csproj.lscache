@@ -97,6 +97,7 @@ Pages/
    Index.cshtml.cs
   Profile.cshtml.cs
   Reports/Index.cshtml.cs
+  Settings.cshtml.cs
  AuthTest.cshtml.cs
  Cart.cshtml.cs
  Checkout.cshtml.cs
@@ -527,6 +528,7 @@ Pages/
    Index.cshtml
   Profile.cshtml
   Reports/Index.cshtml
+  Settings.cshtml
   Shared/_AdminLayout.cshtml
   _ViewStart.cshtml
  AuthTest.cshtml
@@ -571,6 +573,7 @@ Pages/
    Index.cshtml
   Profile.cshtml
   Reports/Index.cshtml
+  Settings.cshtml
   Shared/_AdminLayout.cshtml
   _ViewStart.cshtml
  AuthTest.cshtml
