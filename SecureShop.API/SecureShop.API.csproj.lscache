@@ -95,6 +95,7 @@ Pages/
    Create.cshtml.cs
    Edit.cshtml.cs
    Index.cshtml.cs
+  Profile.cshtml.cs
   Reports/Index.cshtml.cs
  AuthTest.cshtml.cs
  Cart.cshtml.cs
@@ -524,6 +525,7 @@ Pages/
    Create.cshtml
    Edit.cshtml
    Index.cshtml
+  Profile.cshtml
   Reports/Index.cshtml
   Shared/_AdminLayout.cshtml
   _ViewStart.cshtml
@@ -567,6 +569,7 @@ Pages/
    Create.cshtml
    Edit.cshtml
    Index.cshtml
+  Profile.cshtml
   Reports/Index.cshtml
   Shared/_AdminLayout.cshtml
   _ViewStart.cshtml
