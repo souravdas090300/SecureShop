@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using Microsoft.Extensions.Logging;
 using SecureShop.Application.DTOs.Products;
 using SecureShop.Application.Services;
 
@@ -12,14 +13,16 @@ namespace SecureShop.API.Pages;
 public class IndexModel : PageModel
 {
     private readonly ProductService _productService;
+    private readonly ILogger<IndexModel> _logger;
 
     /// <summary>Featured products to display on the home page hero section.</summary>
     public List<ProductResponseDto> FeaturedProducts { get; set; } = new();
 
     /// <summary>Injects the product service.</summary>
-    public IndexModel(ProductService productService)
+    public IndexModel(ProductService productService, ILogger<IndexModel> logger)
     {
         _productService = productService;
+        _logger = logger;
     }
 
     /// <summary>
@@ -35,7 +38,7 @@ public class IndexModel : PageModel
         }
         catch (Exception ex)
         {
-            _ = ex; // non-fatal — home page shows empty product section
+            _logger.LogError(ex, "Failed to load featured products on home page");
         }
     }
 }

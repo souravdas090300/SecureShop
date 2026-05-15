@@ -43,12 +43,8 @@ public class ProductService
         // Return immediately on a cache hit; avoids a database round-trip.
         if (cached is not null) return cached;
 
-        // Run both DB queries concurrently to halve the round-trip time.
-        var productsTask = _repo.GetAllAsync(category, search, page, pageSize);
-        var totalTask = _repo.CountAsync(category, search);
-        await Task.WhenAll(productsTask, totalTask);
-        var products = productsTask.Result;
-        var total = totalTask.Result;
+        var products = await _repo.GetAllAsync(category, search, page, pageSize);
+        var total = await _repo.CountAsync(category, search);
 
         var result = new PagedProductsDto(
             products.Select(MapToDto), total, page, pageSize,
