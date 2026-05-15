@@ -1,6 +1,6 @@
-@SecureShop.API_HostAddress = http://localhost:5179
+@SecureShopAPI_HostAddress = http://localhost:5179
 
-GET {{SecureShop.API_HostAddress}}/weatherforecast/
+GET {{SecureShopAPI_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###
