@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using SecureShop.Application;
 using SecureShop.Application.DTOs.Auth;
@@ -43,7 +44,7 @@ public class AuthServiceTests
             })
             .Build();
 
-        return (um, rm, new AuthService(um.Object, rm.Object, config));
+        return (um, rm, new AuthService(um.Object, rm.Object, config, NullLogger<AuthService>.Instance));
     }
 
     // ── RegisterAsync ────────────────────────────────────────────────────────
@@ -199,7 +200,7 @@ public class AuthServiceTests
                 ["Jwt:Audience"]        = "test",
             })
             .Build();
-        var svc = new AuthService(um.Object, rm.Object, config);
+        var svc = new AuthService(um.Object, rm.Object, config, NullLogger<AuthService>.Instance);
 
         var act = () => svc.GoogleSignInAsync(new GoogleSignInDto { IdToken = "fake" });
 
@@ -217,7 +218,7 @@ public class AuthServiceTests
                 ["Jwt:Secret"]          = AccountTestHelper.TestSecret,
             })
             .Build();
-        var svc = new AuthService(um.Object, rm.Object, config);
+        var svc = new AuthService(um.Object, rm.Object, config, NullLogger<AuthService>.Instance);
 
         var act = () => svc.GoogleSignInAsync(new GoogleSignInDto { IdToken = "fake" });
 

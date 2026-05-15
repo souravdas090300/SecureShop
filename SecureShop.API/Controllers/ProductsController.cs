@@ -6,13 +6,13 @@ using SecureShop.Domain.Exceptions;
 
 namespace SecureShop.API.Controllers;
 
-[ApiController]
-[Route("api/products")]
 /// <summary>
 /// REST API controller for the product catalogue.
 /// Read operations (list, get by ID) are public (anonymous access allowed).
-/// Write operations (create, update, delete) require the Admin role.
+/// Write operations (create, update, delete) require the <c>Admin</c> role.
 /// </summary>
+[ApiController]
+[Route("api/products")]
 public class ProductsController : ControllerBase
 {
     private readonly ProductService _svc;

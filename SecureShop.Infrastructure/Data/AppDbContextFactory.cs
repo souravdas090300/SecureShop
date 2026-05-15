@@ -4,8 +4,24 @@ using Microsoft.Extensions.Configuration;
 
 namespace SecureShop.Infrastructure;
 
+/// <summary>
+/// Design-time factory for <see cref="AppDbContext"/>.
+/// Used by EF Core tooling (<c>dotnet ef migrations add</c>, <c>dotnet ef database update</c>)
+/// to create a context without a running host. Walks the directory tree upward from the
+/// working directory to locate <c>SecureShop.API/appsettings.json</c> for connection string resolution.
+/// </summary>
 public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
 {
+    /// <summary>
+    /// Creates a configured <see cref="AppDbContext"/> suitable for EF Core design-time operations.
+    /// Reads the connection string from <c>appsettings.json</c>, environment-specific overrides,
+    /// user secrets, and environment variables — in that priority order.
+    /// </summary>
+    /// <param name="args">CLI arguments forwarded from the EF Core tooling (typically empty).</param>
+    /// <returns>A fully configured <see cref="AppDbContext"/> instance.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when no <c>DefaultConnection</c> connection string can be resolved.
+    /// </exception>
     public AppDbContext CreateDbContext(string[] args)
     {
         var basePath = ResolveConfigurationBasePath();
@@ -33,6 +49,12 @@ public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
         return new AppDbContext(optionsBuilder.Options);
     }
 
+    /// <summary>
+    /// Walks the directory tree upward from the current working directory to find the
+    /// <c>SecureShop.API</c> project folder that contains <c>appsettings.json</c>.
+    /// This allows the factory to work regardless of whether it is invoked from the
+    /// solution root, the Infrastructure project directory, or the API project directory.
+    /// </summary>
     private static string ResolveConfigurationBasePath()
     {
         var current = new DirectoryInfo(Directory.GetCurrentDirectory());

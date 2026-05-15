@@ -7,14 +7,14 @@ using SecureShop.Domain.Exceptions;
 
 namespace SecureShop.API.Controllers;
 
+/// <summary>
+/// REST API controller for order management.
+/// All endpoints require authentication (Bearer JWT or AdminCookie).
+/// Admins can access any order; regular users are restricted to their own.
+/// </summary>
 [ApiController]
 [Route("api/orders")]
 [Authorize]
-/// <summary>
-/// REST API controller for order management.
-/// All endpoints require authentication (Bearer or AdminCookie).
-/// Admins can access any order; regular users are restricted to their own.
-/// </summary>
 public class OrdersController : ControllerBase
 {
     private readonly OrderService _svc;

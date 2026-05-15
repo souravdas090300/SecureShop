@@ -4,6 +4,7 @@ using System.Text;
 using Google.Apis.Auth;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using SecureShop.Application.DTOs.Auth;
 using SecureShop.Application.Interfaces;
@@ -22,16 +23,19 @@ public class AuthService : IAuthService
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly RoleManager<IdentityRole> _roleManager;
     private readonly IConfiguration _config;
+    private readonly ILogger<AuthService> _logger;
 
-    /// <summary>Injects Identity managers and application configuration.</summary>
+    /// <summary>Injects Identity managers, application configuration, and a structured logger.</summary>
     public AuthService(
         UserManager<ApplicationUser> userManager, 
         RoleManager<IdentityRole> roleManager,
-        IConfiguration config)
+        IConfiguration config,
+        ILogger<AuthService> logger)
     {
         _userManager = userManager;
         _roleManager = roleManager;
         _config = config;
+        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -63,34 +67,31 @@ public class AuthService : IAuthService
     /// <inheritdoc />
     public async Task<AuthResponseDto> LoginAsync(LoginDto dto)
     {
-        Console.WriteLine($"[AuthService] Login attempt - Email: '{dto.Email}', Password length: {dto.Password?.Length ?? 0}");
-        
+        _logger.LogInformation("Login attempt for email: {Email}", dto.Email);
+
         var user = await _userManager.FindByEmailAsync(dto.Email);
-        
+
         if (user == null)
         {
-            Console.WriteLine($"[AuthService] User not found for email: '{dto.Email}'");
+            _logger.LogWarning("Login failed — user not found for email: {Email}", dto.Email);
             throw new DomainException("Invalid credentials");
         }
-        
-        Console.WriteLine($"[AuthService] User found: ID={user.Id}, Email={user.Email}");
-        
+
         if (string.IsNullOrEmpty(dto.Password))
         {
             throw new DomainException("Invalid credentials");
         }
-        
+
         // Password is guaranteed to be non-null here due to check above
         var passwordValid = await _userManager.CheckPasswordAsync(user, dto.Password!);
-        Console.WriteLine($"[AuthService] Password check result: {passwordValid}");
-        
+
         if (!passwordValid)
         {
-            Console.WriteLine($"[AuthService] Invalid password for user: '{dto.Email}'");
+            _logger.LogWarning("Login failed — invalid password for email: {Email}", dto.Email);
             throw new DomainException("Invalid credentials");
         }
 
-        Console.WriteLine($"[AuthService] Login successful for: '{dto.Email}'");
+        _logger.LogInformation("Login successful for email: {Email}", dto.Email);
         return await GenerateTokenAsync(user);
     }
 
