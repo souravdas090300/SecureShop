@@ -64,6 +64,8 @@ Migrations/
  20260327052207_OptionalOrderItemProductRelation.Designer.cs
  20260430041828_AddProductImageUrl.cs
  20260430041828_AddProductImageUrl.Designer.cs
+ 20260515094421_AddDataProtectionKeys.cs
+ 20260515094421_AddDataProtectionKeys.Designer.cs
  AppDbContextModelSnapshot.cs
 obj/Debug/net8.0/
  .NETCoreApp,Version=v8.0.AssemblyAttributes.cs
@@ -227,6 +229,7 @@ Services/
   System.IO.Pipelines.dll
   System.Security.Cryptography.Xml.dll
   System.Threading.RateLimiting.dll
+ microsoft.aspnetcore.dataprotection.entityframeworkcore/8.0.11/lib/net8.0/Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.dll
  microsoft.aspnetcore.identity.entityframeworkcore/8.0.11/lib/net8.0/Microsoft.AspNetCore.Identity.EntityFrameworkCore.dll
  microsoft.entityframeworkcore.abstractions/8.0.11/lib/net8.0/Microsoft.EntityFrameworkCore.Abstractions.dll
  microsoft.entityframeworkcore.relational/8.0.11/lib/net8.0/Microsoft.EntityFrameworkCore.Relational.dll
@@ -411,6 +414,7 @@ Services/
  system.identitymodel.tokens.jwt/8.0.0/lib/net8.0/System.IdentityModel.Tokens.Jwt.dll
  system.io.hashing/10.0.2/lib/net8.0/System.IO.Hashing.dll
  system.management/7.0.2/lib/net7.0/System.Management.dll
+ system.security.cryptography.pkcs/8.0.1/lib/net8.0/System.Security.Cryptography.Pkcs.dll
  system.security.cryptography.protecteddata/8.0.0/lib/net8.0/System.Security.Cryptography.ProtectedData.dll
 
 [analyzerReferences]

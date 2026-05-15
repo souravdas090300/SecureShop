@@ -240,6 +240,7 @@ Program.cs
  microsoft.aspnetcore.authentication.jwtbearer/8.0.0/lib/net8.0/Microsoft.AspNetCore.Authentication.JwtBearer.dll
  microsoft.aspnetcore.cryptography.internal/10.0.7/lib/netstandard2.0/Microsoft.AspNetCore.Cryptography.Internal.dll
  microsoft.aspnetcore.dataprotection.abstractions/10.0.7/lib/netstandard2.0/Microsoft.AspNetCore.DataProtection.Abstractions.dll
+ microsoft.aspnetcore.dataprotection.entityframeworkcore/8.0.11/lib/net8.0/Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.dll
  microsoft.aspnetcore.dataprotection.extensions/10.0.7/lib/netstandard2.0/Microsoft.AspNetCore.DataProtection.Extensions.dll
  microsoft.aspnetcore.dataprotection.stackexchangeredis/8.0.0/lib/net8.0/Microsoft.AspNetCore.DataProtection.StackExchangeRedis.dll
  microsoft.aspnetcore.dataprotection/10.0.7/lib/netstandard2.0/Microsoft.AspNetCore.DataProtection.dll
