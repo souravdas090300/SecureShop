@@ -51,39 +51,15 @@ builder.Services.AddInfrastructureServices(builder.Configuration);
 builder.Services.AddHttpClient();
 
 // ── Data Protection with persistent keys ──────────────────────────────────────
-// CRITICAL: Without persistent keys, cookie encryption keys change on every restart
-// causing all existing cookies to become unreadable
+// DataProtection keys are stored in PostgreSQL so they survive container restarts.
+// This means admin/user cookies remain valid across Railway redeploys.
 var keysDirectory = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "DataProtection-Keys");
 Directory.CreateDirectory(keysDirectory);
 
-var redisConnStr = builder.Configuration.GetConnectionString("Redis");
-var dpBuilder = builder.Services.AddDataProtection()
-    .SetApplicationName("SecureShop");
-
-if (!string.IsNullOrWhiteSpace(redisConnStr))
-{
-    // Store keys in Redis so they survive container restarts on Railway
-    try
-    {
-        // abortConnect=false prevents startup crash if Redis is temporarily unavailable
-    var dpRedisStr = redisConnStr.Contains("abortConnect", StringComparison.OrdinalIgnoreCase)
-        ? redisConnStr
-        : redisConnStr + ",abortConnect=false";
-    var redisForDp = StackExchange.Redis.ConnectionMultiplexer.Connect(dpRedisStr);
-        dpBuilder.PersistKeysToStackExchangeRedis(redisForDp, "SecureShop:DataProtection:Keys");
-        Console.WriteLine("[STARTUP] Data Protection keys stored in Redis");
-    }
-    catch (Exception ex)
-    {
-        Console.Error.WriteLine($"[STARTUP] Redis DataProtection failed, falling back to filesystem: {ex.Message}");
-        dpBuilder.PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
-    }
-}
-else
-{
-    dpBuilder.PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
-    Console.WriteLine($"[STARTUP] Data Protection keys directory: {keysDirectory}");
-}
+builder.Services.AddDataProtection()
+    .SetApplicationName("SecureShop")
+    .PersistKeysToDbContext<AppDbContext>();
+Console.WriteLine("[STARTUP] Data Protection keys will be stored in PostgreSQL");
 
 // ── Health checks ─────────────────────────────────────────────────────────────
 builder.Services.AddHealthChecks();
