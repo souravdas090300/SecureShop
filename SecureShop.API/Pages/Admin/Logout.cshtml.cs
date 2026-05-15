@@ -19,15 +19,15 @@ public class AdminLogoutModel : PageModel
         _logger = logger;
     }
 
-    /// <summary>Signs the admin out of the AdminCookie scheme and redirects to admin login.</summary>
-    public async Task<IActionResult> OnGetAsync()
+    /// <summary>GET /admin/logout — safe redirect to login; does NOT sign out (use POST).</summary>
+    public IActionResult OnGet() => RedirectToPage("/Admin/Login");
+
+    /// <summary>POST /admin/logout — signs the admin out and redirects to login.</summary>
+    public async Task<IActionResult> OnPostAsync()
     {
         _logger.LogInformation("[AdminLogout] Admin logging out");
-        
         await HttpContext.SignOutAsync("AdminCookie");
-        
         _logger.LogInformation("[AdminLogout] Admin logged out successfully");
-        
-        return Redirect("/admin/login");
+        return RedirectToPage("/Admin/Login");
     }
 }

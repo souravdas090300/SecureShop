@@ -423,14 +423,10 @@ public class AdminProductEditModelTests
 
 public class AdminLogoutModelTests
 {
-    [Fact]
-    public async Task OnGetAsync_SignsOutAndRedirectsToAdminLogin()
+    private AdminLogoutModel CreateModel(out Mock<IAuthenticationService> authService)
     {
         var logger = new Mock<ILogger<AdminLogoutModel>>();
-        var model = new AdminLogoutModel(logger.Object);
-
-        // Mock IAuthenticationService so HttpContext.SignOutAsync("AdminCookie") works
-        var authService = new Mock<IAuthenticationService>();
+        authService = new Mock<IAuthenticationService>();
         authService.Setup(s => s.SignOutAsync(
                 It.IsAny<HttpContext>(), "AdminCookie", It.IsAny<AuthenticationProperties>()))
             .Returns(Task.CompletedTask);
@@ -439,15 +435,38 @@ public class AdminLogoutModelTests
         services.AddSingleton(authService.Object);
         var sp = services.BuildServiceProvider();
 
+        var model = new AdminLogoutModel(logger.Object);
         var httpContext = new DefaultHttpContext { RequestServices = sp };
         model.PageContext = new PageContext(new ActionContext(
             httpContext, new RouteData(), new PageActionDescriptor()));
         model.TempData = AdminTestHelper.EmptyTempData();
+        return model;
+    }
 
-        var result = await model.OnGetAsync();
+    [Fact]
+    public void OnGet_RedirectsToAdminLoginWithoutSigningOut()
+    {
+        var model = CreateModel(out var authService);
 
-        result.Should().BeOfType<RedirectResult>()
-            .Which.Url.Should().Be("/admin/login");
+        var result = model.OnGet();
+
+        result.Should().BeOfType<RedirectToPageResult>()
+            .Which.PageName.Should().Be("/Admin/Login");
+
+        authService.Verify(s => s.SignOutAsync(
+            It.IsAny<HttpContext>(), It.IsAny<string>(), It.IsAny<AuthenticationProperties>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task OnPostAsync_SignsOutAndRedirectsToAdminLogin()
+    {
+        var model = CreateModel(out var authService);
+
+        var result = await model.OnPostAsync();
+
+        result.Should().BeOfType<RedirectToPageResult>()
+            .Which.PageName.Should().Be("/Admin/Login");
 
         authService.Verify(s => s.SignOutAsync(
             It.IsAny<HttpContext>(), "AdminCookie", It.IsAny<AuthenticationProperties>()),
