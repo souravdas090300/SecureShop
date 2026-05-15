@@ -59,6 +59,8 @@ internal static class AdminTestHelper
     public static void SetupPageContext(PageModel model)
     {
         var httpContext = new DefaultHttpContext();
+        httpContext.Request.Scheme = "http";
+        httpContext.Request.Host = new HostString("localhost", 8080);
         model.PageContext = new PageContext(new ActionContext(
             httpContext, new RouteData(), new PageActionDescriptor()));
     }
