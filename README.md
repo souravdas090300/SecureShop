@@ -334,11 +334,10 @@ Visit `http://localhost:<port>/swagger` for the interactive API explorer.
 
 ## Deploying to Railway
 
-Railway deploys from the `gh-pages` branch using the `Dockerfile` in the repo root. Push to both branches:
+Railway watches the `main` branch and deploys automatically on every push using the `Dockerfile` in the repo root:
 
 ```bash
 git push origin main
-git push origin main:gh-pages
 ```
 
 EF Core migrations run automatically in a background task 2 seconds after Kestrel starts accepting requests — Railway's health check at `/health` passes immediately.
