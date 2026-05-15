@@ -56,11 +56,30 @@ builder.Services.AddHttpClient();
 var keysDirectory = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "DataProtection-Keys");
 Directory.CreateDirectory(keysDirectory);
 
-builder.Services.AddDataProtection()
-    .PersistKeysToFileSystem(new DirectoryInfo(keysDirectory))
+var redisConnStr = builder.Configuration.GetConnectionString("Redis");
+var dpBuilder = builder.Services.AddDataProtection()
     .SetApplicationName("SecureShop");
 
-Console.WriteLine($"[STARTUP] Data Protection keys directory: {keysDirectory}");
+if (!string.IsNullOrWhiteSpace(redisConnStr))
+{
+    // Store keys in Redis so they survive container restarts on Railway
+    try
+    {
+        var redisForDp = StackExchange.Redis.ConnectionMultiplexer.Connect(redisConnStr);
+        dpBuilder.PersistKeysToStackExchangeRedis(redisForDp, "SecureShop:DataProtection:Keys");
+        Console.WriteLine("[STARTUP] Data Protection keys stored in Redis");
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"[STARTUP] Redis DataProtection failed, falling back to filesystem: {ex.Message}");
+        dpBuilder.PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
+    }
+}
+else
+{
+    dpBuilder.PersistKeysToFileSystem(new DirectoryInfo(keysDirectory));
+    Console.WriteLine($"[STARTUP] Data Protection keys directory: {keysDirectory}");
+}
 
 // ── Health checks ─────────────────────────────────────────────────────────────
 builder.Services.AddHealthChecks();
