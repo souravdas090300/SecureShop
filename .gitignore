@@ -53,6 +53,9 @@ CodeCoverage/
 TestResult.xml
 nunit-*.xml
 
+# Render env file — contains secrets, never commit
+render.env
+
 # Local environment and secret override files — never commit environment-specific appsettings
 appsettings.Development.json
 appsettings.Production.json
