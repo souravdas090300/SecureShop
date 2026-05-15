@@ -79,6 +79,8 @@ public static class DependencyInjection
             {
                 var opts = ConfigurationOptions.Parse(redisConnectionString);
                 opts.ConnectTimeout = 3000;
+                opts.SyncTimeout = 1000;   // fail fast on hung operations (default is 5 000 ms)
+                opts.AsyncTimeout = 1000;
                 opts.AbortOnConnectFail = false;
                 return ConnectionMultiplexer.Connect(opts);
             }
