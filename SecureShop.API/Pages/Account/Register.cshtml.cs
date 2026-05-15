@@ -114,11 +114,12 @@ public class RegisterModel : PageModel
                     var user = await _userManager.FindByEmailAsync(Email);
                     if (user != null)
                     {
-                        var otp     = Random.Shared.Next(100_000, 999_999).ToString();
-                        var expiry  = DateTime.UtcNow.AddMinutes(15).ToString("O");
+                        var otp    = Random.Shared.Next(100_000, 999_999).ToString();
+                        var expiry = DateTime.UtcNow.AddMinutes(15).ToString("O");
                         await _userManager.SetAuthenticationTokenAsync(
                             user, "SecureShop", "EmailVerifyOTP", $"{otp}|{expiry}");
 
+                        bool emailSent = true;
                         try
                         {
                             await _emailService.SendAsync(
@@ -128,15 +129,25 @@ public class RegisterModel : PageModel
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogWarning(ex, "OTP email failed for {Email}", Email);
-                            // Continue — user can request a resend later.
+                            _logger.LogWarning(ex, "OTP email failed for {Email} — auto-confirming email", Email);
+                            emailSent = false;
                         }
 
-                        TempData["PendingEmail"]   = Email;
-                        TempData["PendingUserId"]  = user.Id;
-                        TempData["PendingToken"]   = result.Token;
-                        TempData["SuccessMessage"] = $"Welcome {result.FirstName ?? FirstName}! A 6-digit verification code has been sent to {Email}.";
-                        return RedirectToPage("/Account/VerifyEmail");
+                        if (emailSent)
+                        {
+                            // OTP email sent — show verification page.
+                            // Do NOT store the JWT in TempData; VerifyEmail generates a fresh token.
+                            TempData["PendingEmail"]   = Email;
+                            TempData["PendingUserId"]  = user.Id;
+                            TempData["SuccessMessage"] = $"Welcome {result.FirstName ?? FirstName}! A 6-digit verification code has been sent to {Email}.";
+                            return RedirectToPage("/Account/VerifyEmail");
+                        }
+
+                        // Email delivery failed — auto-confirm the account so the user isn't stuck.
+                        user.EmailConfirmed = true;
+                        await _userManager.UpdateAsync(user);
+                        TempData["SuccessMessage"] = $"Welcome {result.FirstName ?? FirstName}! Your account has been created. Please sign in.";
+                        return RedirectToPage("/Account/Login");
                     }
 
                     // Fallback (user not found after creation — very unlikely)

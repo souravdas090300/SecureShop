@@ -41,7 +41,6 @@ public class VerifyEmailModel : PageModel
     {
         Email         = TempData["PendingEmail"]?.ToString()  ?? string.Empty;
         PendingUserId = TempData["PendingUserId"]?.ToString() ?? string.Empty;
-        PendingToken  = TempData["PendingToken"]?.ToString()  ?? string.Empty;
 
         if (string.IsNullOrEmpty(Email))
         {
