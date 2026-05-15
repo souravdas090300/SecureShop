@@ -29,37 +29,54 @@ public class CacheService : ICacheService
     /// <inheritdoc />
     public async Task<T?> GetAsync<T>(string key)
     {
-        var value = await _db.StringGetAsync(key);
-
-        // Return default when the key doesn't exist or has expired.
-        return value.IsNullOrEmpty ? default : JsonSerializer.Deserialize<T>(value!);
+        try
+        {
+            var value = await _db.StringGetAsync(key);
+            // Return default when the key doesn't exist or has expired.
+            return value.IsNullOrEmpty ? default : JsonSerializer.Deserialize<T>(value!);
+        }
+        catch (Exception)
+        {
+            // Redis unavailable — treat as cache miss; caller will fetch from DB.
+            return default;
+        }
     }
 
     /// <inheritdoc />
     public async Task SetAsync<T>(string key, T value, TimeSpan? expiry = null)
     {
-        var json = JsonSerializer.Serialize(value);
-
-        // Default TTL of 5 minutes applies when the caller doesn't specify one.
-        await _db.StringSetAsync(key, json, expiry ?? TimeSpan.FromMinutes(5));
+        try
+        {
+            var json = JsonSerializer.Serialize(value);
+            // Default TTL of 5 minutes applies when the caller doesn't specify one.
+            await _db.StringSetAsync(key, json, expiry ?? TimeSpan.FromMinutes(5));
+        }
+        catch (Exception)
+        {
+            // Redis unavailable — skip caching; DB is the source of truth.
+        }
     }
 
     /// <inheritdoc />
     public async Task RemoveAsync(string key)
     {
-        await _db.KeyDeleteAsync(key);
+        try { await _db.KeyDeleteAsync(key); } catch (Exception) { }
     }
 
     /// <inheritdoc />
     public async Task RemoveByPrefixAsync(string prefix)
     {
-        // SCAN through all keys matching the prefix on the first Redis endpoint.
-        // This avoids KEYS which is blocking and unsuitable for production.
-        var server = _redis.GetServer(_redis.GetEndPoints().First());
-        var keys = server.Keys(pattern: $"{prefix}*").ToArray();
-
-        // Batch-delete in a single pipeline call to minimise round-trips.
-        if (keys.Length > 0)
-            await _db.KeyDeleteAsync(keys);
+        try
+        {
+            // SCAN through all keys matching the prefix on the first Redis endpoint.
+            var server = _redis.GetServer(_redis.GetEndPoints().First());
+            var keys = server.Keys(pattern: $"{prefix}*").ToArray();
+            if (keys.Length > 0)
+                await _db.KeyDeleteAsync(keys);
+        }
+        catch (Exception)
+        {
+            // Redis unavailable — skip cache invalidation.
+        }
     }
 }
