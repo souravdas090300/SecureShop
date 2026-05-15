@@ -39,6 +39,7 @@ public class OrdersController : ControllerBase
     /// <param name="dto">List of products and quantities to order.</param>
     /// <returns>201 Created with the new order, or 400/500 on failure.</returns>
     [HttpPost]
+    [Authorize(AuthenticationSchemes = "Bearer")]
     public async Task<ActionResult<OrderResponseDto>> Create([FromBody] CreateOrderDto dto)
     {
         try
@@ -134,6 +135,7 @@ public class OrdersController : ControllerBase
 
     /// <summary>Returns all orders belonging to the currently authenticated user.</summary>
     [HttpGet("my")]
+    [Authorize(AuthenticationSchemes = "Bearer")]
     public async Task<ActionResult<IEnumerable<OrderResponseDto>>> GetMine()
     {
         try
