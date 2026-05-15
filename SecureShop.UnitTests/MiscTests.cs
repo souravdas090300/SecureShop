@@ -261,7 +261,7 @@ public class IndexModelTests
              .Returns(Task.CompletedTask);
 
         var service = new ProductService(repo.Object, cache.Object);
-        var model = new IndexModel(service);
+        var model = new IndexModel(service, Microsoft.Extensions.Logging.Abstractions.NullLogger<IndexModel>.Instance);
         PageModelTestHelper.SetupHttpContext(model);
         return model;
     }
