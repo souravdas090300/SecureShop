@@ -113,9 +113,20 @@ public class Product
     /// <exception cref="DomainException">Thrown when requested quantity exceeds available stock.</exception>
     public void ReduceStock(int quantity)
     {
+        if (quantity <= 0)
+            throw new DomainException("Stock reduction quantity must be positive");
         if (quantity > StockQuantity)
             throw new DomainException($"Insufficient stock. Available: {StockQuantity}");
         StockQuantity -= quantity;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>Restores stock when an order cannot be persisted or payment setup fails.</summary>
+    public void RestoreStock(int quantity)
+    {
+        if (quantity <= 0)
+            throw new DomainException("Stock restoration quantity must be positive");
+        StockQuantity = checked(StockQuantity + quantity);
         UpdatedAt = DateTime.UtcNow;
     }
 

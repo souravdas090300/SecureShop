@@ -26,6 +26,19 @@ public interface IProductRepository
     /// <summary>Persists changes to an existing <see cref="Product"/>.</summary>
     Task UpdateAsync(Product product);
 
+    /// <summary>
+    /// Atomically decrements stock by <paramref name="quantity"/> in a single
+    /// conditional UPDATE, so concurrent orders cannot oversell.
+    /// Returns <c>false</c> when stock is insufficient or the product is inactive.
+    /// </summary>
+    Task<bool> TryReserveStockAsync(Guid productId, int quantity, CancellationToken ct = default);
+
+    /// <summary>
+    /// Atomically increments stock by <paramref name="quantity"/> in a single UPDATE.
+    /// Used to release reserved stock when order setup fails or payment is cancelled.
+    /// </summary>
+    Task RestoreStockAsync(Guid productId, int quantity, CancellationToken ct = default);
+
     /// <summary>Returns <c>true</c> when a product with the given <paramref name="id"/> exists.</summary>
     Task<bool> ExistsAsync(Guid id);
 

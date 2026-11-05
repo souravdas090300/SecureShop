@@ -48,8 +48,41 @@ public class ProductRepository : IProductRepository
     /// <inheritdoc />
     public async Task UpdateAsync(Product product)
     {
-        _db.Products.Update(product);
+        // Only mark the entity modified when it is detached. For tracked entities
+        // (the normal path: GetByIdAsync and UpdateAsync share a scoped DbContext)
+        // EF persists just the properties that actually changed — calling Update()
+        // would mark every column modified and could write a stale StockQuantity
+        // back over a concurrent atomic reservation.
+        if (_db.Entry(product).State == EntityState.Detached)
+            _db.Products.Update(product);
         await _db.SaveChangesAsync();
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> TryReserveStockAsync(Guid productId, int quantity, CancellationToken ct = default)
+    {
+        // Single conditional UPDATE: the database evaluates StockQuantity >= quantity
+        // and applies the decrement atomically, so two concurrent reservations cannot
+        // both claim the last units. The global IsActive query filter also applies,
+        // so deactivated products cannot be reserved.
+        var rows = await _db.Products
+            .Where(p => p.Id == productId && p.StockQuantity >= quantity)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(p => p.StockQuantity, p => p.StockQuantity - quantity)
+                .SetProperty(p => p.UpdatedAt, DateTime.UtcNow), ct);
+        return rows == 1;
+    }
+
+    /// <inheritdoc />
+    public async Task RestoreStockAsync(Guid productId, int quantity, CancellationToken ct = default)
+    {
+        // IgnoreQueryFilters: a deactivated product must still get its stock back.
+        await _db.Products
+            .IgnoreQueryFilters()
+            .Where(p => p.Id == productId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(p => p.StockQuantity, p => p.StockQuantity + quantity)
+                .SetProperty(p => p.UpdatedAt, DateTime.UtcNow), ct);
     }
 
     /// <inheritdoc />

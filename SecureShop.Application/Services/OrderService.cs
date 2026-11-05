@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using SecureShop.Application.DTOs.Orders;
 using SecureShop.Application.Interfaces;
 using SecureShop.Domain.Entities;
@@ -15,19 +16,28 @@ public class OrderService
     private readonly IOrderRepository _orderRepo;
     private readonly IProductRepository _productRepo;
     private readonly IPaymentService _paymentService;
+    private readonly ICacheService _cache;
+    private readonly ILogger<OrderService> _logger;
+
+    // Matches the key prefix used by ProductService for individual product DTOs.
+    private const string ProductCachePrefix = "product:";
 
     /// <summary>
     /// Initialises the service with its required dependencies.
-    /// All three are registered as scoped services via DI.
+    /// All are registered as scoped services via DI.
     /// </summary>
     public OrderService(
         IOrderRepository orderRepo,
         IProductRepository productRepo,
-        IPaymentService paymentService)
+        IPaymentService paymentService,
+        ICacheService cache,
+        ILogger<OrderService> logger)
     {
         _orderRepo = orderRepo;
         _productRepo = productRepo;
         _paymentService = paymentService;
+        _cache = cache;
+        _logger = logger;
     }
 
     /// <summary>
@@ -43,35 +53,139 @@ public class OrderService
     /// </exception>
     public async Task<OrderResponseDto> CreateAsync(CreateOrderDto dto, string userId)
     {
-        var items = new List<OrderItem>();
+        if (dto.Items is null || dto.Items.Count == 0 || dto.Items.Any(item => item.Quantity <= 0))
+            throw new DomainException("Order must contain items with a positive quantity");
 
-        // Validate and reserve stock for every requested line item.
-        foreach (var item in dto.Items)
+        var quantities = dto.Items
+            .GroupBy(item => item.ProductId)
+            .Select(group => new
+            {
+                ProductId = group.Key,
+                Quantity = group.Sum(item => (long)item.Quantity)
+            })
+            // Deterministic reservation order prevents deadlocks if these updates
+            // are ever wrapped in a transaction.
+            .OrderBy(item => item.ProductId)
+            .ToList();
+        if (quantities.Any(item => item.Quantity > int.MaxValue))
+            throw new DomainException("Requested quantity is too large");
+
+        var items = new List<OrderItem>();
+        var productsToReserve = new List<(Product Product, int Quantity)>();
+
+        // Read each product once for its price; stock is reserved atomically below.
+        foreach (var item in quantities)
         {
             var product = await _productRepo.GetByIdAsync(item.ProductId)
                 ?? throw new DomainException($"Product {item.ProductId} not found");
-
-            // ReduceStock enforces the invariant that stock cannot go negative.
-            product.ReduceStock(item.Quantity);
-            await _productRepo.UpdateAsync(product);
+            var quantity = (int)item.Quantity;
 
             // Capture the unit price at the time of order so later price changes
             // do not affect historical order totals.
-            items.Add(OrderItem.Create(product.Id, item.Quantity, product.Price));
+            items.Add(OrderItem.Create(product.Id, quantity, product.Price));
+            productsToReserve.Add((product, quantity));
         }
 
-        // Build the domain aggregate and get a Stripe payment intent client secret.
+        // Build the domain aggregate and create its Stripe payment intent.
         var order = Order.Create(userId, items);
-        var clientSecret = await _paymentService.CreatePaymentIntentAsync(
-            order.TotalAmount,
-            "usd",
-            order.Id);
+        PaymentIntentDetails? paymentIntent = null;
+        var reservedProducts = new List<(Guid ProductId, int Quantity)>();
+        try
+        {
+            foreach (var (product, quantity) in productsToReserve)
+            {
+                // Atomic conditional decrement: the database enforces
+                // StockQuantity >= quantity in the same statement, so concurrent
+                // orders cannot oversell the last units.
+                if (!await _productRepo.TryReserveStockAsync(product.Id, quantity))
+                    throw new DomainException($"Insufficient stock for product {product.Name}");
+                reservedProducts.Add((product.Id, quantity));
 
-        // Attach the payment intent and persist the order.
-        order.SetPaymentIntent(clientSecret);
-        await _orderRepo.CreateAsync(order);
+                // ExecuteUpdate bypasses the change tracker; drop the cached DTO.
+                // product:list:* entries may show stale stock for up to 5 minutes —
+                // acceptable because checkout validates stock atomically against
+                // the database, not the cache.
+                await EvictProductCacheAsync(product.Id);
+            }
 
-        return MapToDto(order);
+            paymentIntent = await _paymentService.CreatePaymentIntentAsync(
+                order.TotalAmount,
+                "usd",
+                order.Id);
+
+            order.SetPaymentIntent(paymentIntent.Id);
+            await _orderRepo.CreateAsync(order);
+        }
+        catch (Exception operationError)
+        {
+            var cleanupErrors = new List<Exception>();
+            if (paymentIntent is not null)
+            {
+                try
+                {
+                    await _paymentService.CancelPaymentIntentAsync(paymentIntent.Id);
+                }
+                catch (Exception cleanupError)
+                {
+                    cleanupErrors.Add(cleanupError);
+                }
+            }
+
+            // Restore every reserved line first; cache eviction runs afterwards so
+            // a cache failure can never skip a stock restore.
+            foreach (var (productId, quantity) in reservedProducts.AsEnumerable().Reverse())
+            {
+                try
+                {
+                    await _productRepo.RestoreStockAsync(productId, quantity);
+                }
+                catch (Exception cleanupError)
+                {
+                    cleanupErrors.Add(cleanupError);
+                }
+            }
+
+            foreach (var (productId, _) in reservedProducts)
+                await EvictProductCacheAsync(productId);
+
+            if (cleanupErrors.Count > 0)
+                throw new AggregateException("Order setup failed and cleanup was incomplete", [operationError, .. cleanupErrors]);
+
+            throw;
+        }
+
+        return MapToDto(order, paymentIntent!.ClientSecret);
+    }
+
+    /// <summary>
+    /// Marks an order paid only when a verified Stripe event matches its
+    /// persisted PaymentIntent ID, expected amount, and currency.
+    /// </summary>
+    public async Task<bool> ConfirmPaymentAsync(
+        string paymentIntentId,
+        long amount,
+        long amountReceived,
+        string currency,
+        CancellationToken cancellationToken = default)
+    {
+        var order = await _orderRepo.GetByPaymentIntentIdAsync(paymentIntentId, cancellationToken);
+        if (order is null ||
+            !string.Equals(currency, "usd", StringComparison.OrdinalIgnoreCase) ||
+            amount != ToMinorUnits(order.TotalAmount) ||
+            amountReceived != ToMinorUnits(order.TotalAmount))
+        {
+            return false;
+        }
+
+        if (order.Status == Domain.Enums.OrderStatus.Paid)
+            return true;
+
+        if (order.Status != Domain.Enums.OrderStatus.PaymentProcessing)
+            return false;
+
+        order.MarkAsPaid();
+        await _orderRepo.UpdateAsync(order, cancellationToken);
+        return true;
     }
 
     /// <summary>
@@ -111,6 +225,9 @@ public class OrderService
         var order = await _orderRepo.GetByIdAsync(id)
             ?? throw new KeyNotFoundException($"Order {id} not found");
 
+        if (!Enum.IsDefined(typeof(Domain.Enums.OrderStatus), status))
+            throw new DomainException("Invalid order status");
+
         order.SetStatus((Domain.Enums.OrderStatus)status);
         await _orderRepo.UpdateAsync(order);
     }
@@ -120,14 +237,14 @@ public class OrderService
     public async Task<IEnumerable<OrderResponseDto>> GetMyOrdersAsync(string userId)
     {
         var orders = await _orderRepo.GetByUserIdAsync(userId);
-        return orders.Select(MapToDto);
+        return orders.Select(order => MapToDto(order));
     }
 
     /// <summary>Returns every order in the system; intended for admin use only.</summary>
     public async Task<IEnumerable<OrderResponseDto>> GetAllOrdersAsync()
     {
         var orders = await _orderRepo.GetAllAsync();
-        return orders.Select(MapToDto);
+        return orders.Select(order => MapToDto(order));
     }
 
     /// <summary>
@@ -135,7 +252,7 @@ public class OrderService
     /// Navigation properties (User, Product) may be null if not eagerly loaded—
     /// safe defaults are used in that case.
     /// </summary>
-    private static OrderResponseDto MapToDto(Order o) => new(
+    private static OrderResponseDto MapToDto(Order o, string? paymentClientSecret = null) => new(
         o.Id,
         o.UserId,
         o.User?.Email ?? string.Empty,
@@ -147,5 +264,26 @@ public class OrderService
         o.Status,
         o.TotalAmount,
         o.StripePaymentIntentId,
-        o.CreatedAt);
+        o.CreatedAt,
+        paymentClientSecret);
+
+    /// <summary>
+    /// Removes the cached product DTO after a stock change. Cache failures are
+    /// logged and swallowed — a stale cache entry is harmless because stock is
+    /// always validated atomically against the database at checkout.
+    /// </summary>
+    private async Task EvictProductCacheAsync(Guid productId)
+    {
+        try
+        {
+            await _cache.RemoveAsync($"{ProductCachePrefix}{productId}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to evict cached product {ProductId} after stock change", productId);
+        }
+    }
+
+    private static long ToMinorUnits(decimal amount) =>
+        checked((long)decimal.Round(amount * 100m, 0, MidpointRounding.AwayFromZero));
 }
