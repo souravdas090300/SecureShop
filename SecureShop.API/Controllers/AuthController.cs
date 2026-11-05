@@ -44,25 +44,23 @@ public class AuthController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("Registration attempt for email: {Email}", dto.Email);
-            
             if (!ModelState.IsValid)
             {
                 return BadRequest(new { message = "Invalid registration data", errors = ModelState });
             }
             
             var result = await _authService.RegisterAsync(dto);
-            _logger.LogInformation("Registration successful for email: {Email}", dto.Email);
+            _logger.LogInformation("Registration successful");
             return Ok(result);
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogWarning("Registration failed for {Email}: {Message}", dto.Email, ex.Message);
+            _logger.LogWarning("Registration failed: {Message}", ex.Message);
             return BadRequest(new { message = ex.Message });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error during registration for {Email}", dto.Email);
+            _logger.LogError(ex, "Unexpected error during registration");
             return StatusCode(500, new { message = "An error occurred during registration" });
         }
     }
@@ -77,30 +75,28 @@ public class AuthController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("Login attempt for email: {Email}, Password length: {Length}", dto.Email, dto.Password?.Length ?? 0);
-            
             if (!ModelState.IsValid)
             {
                 return BadRequest(new { message = "Invalid login data", errors = ModelState });
             }
             
             var result = await _authService.LoginAsync(dto);
-            _logger.LogInformation("Login successful for email: {Email}", dto.Email);
+            _logger.LogInformation("Login successful");
             return Ok(result);
         }
         catch (DomainException ex)
         {
-            _logger.LogWarning("Login failed for {Email}: {Message}", dto.Email, ex.Message);
+            _logger.LogWarning("Login failed: {Message}", ex.Message);
             return Unauthorized(new { message = ex.Message });
         }
         catch (UnauthorizedAccessException ex)
         {
-            _logger.LogWarning("Login failed for {Email}: {Message}", dto.Email, ex.Message);
+            _logger.LogWarning("Login failed: {Message}", ex.Message);
             return Unauthorized(new { message = ex.Message });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error during login for {Email}", dto.Email);
+            _logger.LogError(ex, "Unexpected error during login");
             return StatusCode(500, new { message = "An error occurred during login" });
         }
     }

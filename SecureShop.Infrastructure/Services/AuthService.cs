@@ -47,7 +47,8 @@ public class AuthService : IAuthService
         var user = new ApplicationUser
         {
             UserName = dto.Email, Email = dto.Email,
-            FirstName = dto.FirstName, LastName = dto.LastName
+            FirstName = dto.FirstName, LastName = dto.LastName,
+            LockoutEnabled = true
         };
 
         var result = await _userManager.CreateAsync(user, dto.Password);
@@ -67,13 +68,11 @@ public class AuthService : IAuthService
     /// <inheritdoc />
     public async Task<AuthResponseDto> LoginAsync(LoginDto dto)
     {
-        _logger.LogInformation("Login attempt for email: {Email}", dto.Email);
-
         var user = await _userManager.FindByEmailAsync(dto.Email);
 
         if (user == null)
         {
-            _logger.LogWarning("Login failed — user not found for email: {Email}", dto.Email);
+            _logger.LogWarning("Login failed because the account was not found");
             throw new DomainException("Invalid credentials");
         }
 
@@ -82,16 +81,28 @@ public class AuthService : IAuthService
             throw new DomainException("Invalid credentials");
         }
 
-        // Password is guaranteed to be non-null here due to check above
+        if (!await _userManager.GetLockoutEnabledAsync(user))
+        {
+            var enableLockout = await _userManager.SetLockoutEnabledAsync(user, true);
+            EnsureIdentityOperationSucceeded(enableLockout, "Enabling account lockout");
+        }
+
+        if (await _userManager.IsLockedOutAsync(user))
+            throw new DomainException("Invalid credentials");
+
         var passwordValid = await _userManager.CheckPasswordAsync(user, dto.Password!);
 
         if (!passwordValid)
         {
-            _logger.LogWarning("Login failed — invalid password for email: {Email}", dto.Email);
+            var accessFailed = await _userManager.AccessFailedAsync(user);
+            EnsureIdentityOperationSucceeded(accessFailed, "Recording failed login");
+            _logger.LogWarning("Login failed because the password was invalid");
             throw new DomainException("Invalid credentials");
         }
 
-        _logger.LogInformation("Login successful for email: {Email}", dto.Email);
+        var resetAccessFailedCount = await _userManager.ResetAccessFailedCountAsync(user);
+        EnsureIdentityOperationSucceeded(resetAccessFailedCount, "Resetting failed login count");
+        _logger.LogInformation("Login successful for user {UserId}", user.Id);
         return await GenerateTokenAsync(user);
     }
 
@@ -113,6 +124,8 @@ public class AuthService : IAuthService
             };
 
             var payload = await GoogleJsonWebSignature.ValidateAsync(dto.IdToken, settings);
+            if (!payload.EmailVerified)
+                throw new DomainException("Google account email is not verified.");
 
             // Check if user exists
             var user = await _userManager.FindByEmailAsync(payload.Email);
@@ -126,7 +139,8 @@ public class AuthService : IAuthService
                     Email = payload.Email,
                     FirstName = payload.GivenName ?? "User",
                     LastName = payload.FamilyName ?? "",
-                    EmailConfirmed = true // Google emails are already verified
+                    EmailConfirmed = payload.EmailVerified,
+                    LockoutEnabled = true
                 };
 
                 var result = await _userManager.CreateAsync(user);
@@ -187,5 +201,11 @@ public class AuthService : IAuthService
         return new AuthResponseDto(
             new JwtSecurityTokenHandler().WriteToken(token),
             user.Email!, user.FirstName, user.LastName, expires);
+    }
+
+    private static void EnsureIdentityOperationSucceeded(IdentityResult result, string operation)
+    {
+        if (!result.Succeeded)
+            throw new InvalidOperationException($"{operation} failed: {string.Join(", ", result.Errors.Select(error => error.Code))}");
     }
 }

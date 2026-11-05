@@ -318,7 +318,9 @@ public class AuthTestModelTests
     [Fact]
     public void OnGet_CompletesWithoutError()
     {
-        var model = new SecureShop.API.Pages.AuthTestModel();
+        var environment = new Mock<Microsoft.AspNetCore.Hosting.IWebHostEnvironment>();
+        environment.Setup(value => value.EnvironmentName).Returns("Development");
+        var model = new SecureShop.API.Pages.AuthTestModel(environment.Object);
         PageModelTestHelper.SetupHttpContext(model);
 
         var act = () => model.OnGet();

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -15,6 +16,7 @@ public class ResetPasswordModel : PageModel
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IAuthService _authService;
     private readonly ILogger<ResetPasswordModel> _logger;
+    private readonly IWebHostEnvironment _environment;
 
     [BindProperty] public string Email      { get; set; } = string.Empty;
     [BindProperty] public string ResetToken { get; set; } = string.Empty;
@@ -38,11 +40,13 @@ public class ResetPasswordModel : PageModel
     public ResetPasswordModel(
         UserManager<ApplicationUser> userManager,
         IAuthService authService,
-        ILogger<ResetPasswordModel> logger)
+        ILogger<ResetPasswordModel> logger,
+        IWebHostEnvironment environment)
     {
         _userManager = userManager;
         _authService = authService;
         _logger      = logger;
+        _environment = environment;
     }
 
     public IActionResult OnGet()
@@ -86,13 +90,10 @@ public class ResetPasswordModel : PageModel
         // Auto-login after reset.
         var authResult = await _authService.GenerateTokenForUserAsync(user.Id);
 
-        var cookieOptions = new CookieOptions
-        {
-            HttpOnly = true,
-            Secure   = Request.IsHttps,
-            SameSite = SameSiteMode.Lax,
-            Expires  = DateTimeOffset.UtcNow.AddHours(8)
-        };
+        var cookieOptions = AuthTokenCookieHelper.Create(
+            HttpContext,
+            _environment,
+            DateTimeOffset.UtcNow.AddHours(8));
         Response.Cookies.Append("AuthToken", authResult.Token, cookieOptions);
 
         var principal = JwtCookieHelper.BuildPrincipal(

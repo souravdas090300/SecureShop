@@ -223,13 +223,28 @@
                 const data = await result.json();
 
                 if (result.ok && data.token) {
-                    // Store authentication data
-                    document.cookie = `AuthToken=${data.token}; path=/; max-age=28800`; // 8 hours
-                    document.cookie = `UserEmail=${data.email}; path=/; max-age=28800`;
-                    document.cookie = `UserName=${data.firstName || data.name || ''}; path=/; max-age=28800`;
-                    
-                    // Redirect to home page (already logged in with Google)
-                    window.location.href = '/';
+                    const requestVerificationToken = document.querySelector(
+                        'input[name="__RequestVerificationToken"]')?.value;
+                    if (!requestVerificationToken) {
+                        throw new Error('Missing request verification token');
+                    }
+
+                    const callbackBody = new URLSearchParams({
+                        token: data.token,
+                        __RequestVerificationToken: requestVerificationToken
+                    });
+                    const callback = await fetch('/account/googlecallback', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        credentials: 'same-origin',
+                        body: callbackBody
+                    });
+
+                    if (callback.ok) {
+                        window.location.assign('/');
+                    } else {
+                        throw new Error('Could not establish the sign-in session');
+                    }
                 } else {
                     alert(data.message || 'Google sign-up failed. Please try again.');
                 }

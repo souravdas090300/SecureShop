@@ -1,4 +1,5 @@
 @page
+@model SecureShop.API.Pages.AuthTestModel
 @{
     ViewData["Title"] = "Auth Test";
 }
@@ -26,9 +27,6 @@
                     <p>You are not authenticated.</p>
                 </div>
             }
-
-            <h4 class="mt-4">Cookie Information:</h4>
-            <pre>@string.Join("\n", Request.Cookies.Select(c => $"{c.Key}: {c.Value.Substring(0, Math.Min(50, c.Value.Length))}..."))</pre>
 
             <div class="mt-4">
                 <a href="/account/login" class="btn btn-primary">Go to Login</a>

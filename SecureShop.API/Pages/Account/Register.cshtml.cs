@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using System.ComponentModel.DataAnnotations;
 using System.Text;
@@ -24,6 +25,7 @@ public class RegisterModel : PageModel
     private readonly ILogger<RegisterModel> _logger;
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IEmailService _emailService;
+    private readonly IWebHostEnvironment _environment;
 
     [BindProperty]
     [Required(ErrorMessage = "First name is required")]
@@ -57,14 +59,20 @@ public class RegisterModel : PageModel
     public string? ErrorMessage { get; set; }
     public string GoogleClientId => _configuration["GoogleAuth:ClientId"] ?? "";
 
-    public RegisterModel(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<RegisterModel> logger,
-        UserManager<ApplicationUser> userManager, IEmailService emailService)
+    public RegisterModel(
+        IHttpClientFactory httpClientFactory,
+        IConfiguration configuration,
+        ILogger<RegisterModel> logger,
+        UserManager<ApplicationUser> userManager,
+        IEmailService emailService,
+        IWebHostEnvironment environment)
     {
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
         _logger = logger;
         _userManager = userManager;
         _emailService = emailService;
+        _environment = environment;
     }
 
     public void OnGet()
@@ -236,13 +244,10 @@ public class RegisterModel : PageModel
 
     private async Task SignInWithTokenAsync(string token, string? firstName, string? lastName, string? email)
     {
-        var cookieOptions = new CookieOptions
-        {
-            HttpOnly = true,
-            Secure   = Request.IsHttps,
-            SameSite = SameSiteMode.Lax,
-            Expires  = DateTimeOffset.UtcNow.AddHours(8)
-        };
+        var cookieOptions = AuthTokenCookieHelper.Create(
+            HttpContext,
+            _environment,
+            DateTimeOffset.UtcNow.AddHours(8));
         Response.Cookies.Append("AuthToken", token, cookieOptions);
 
         var principal = JwtCookieHelper.BuildPrincipal(

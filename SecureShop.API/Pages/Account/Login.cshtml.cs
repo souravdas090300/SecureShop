@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Hosting;
 using System.ComponentModel.DataAnnotations;
 using System.Text;
 using System.Text.Json;
@@ -20,6 +21,7 @@ public class LoginModel : PageModel
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
     private readonly ILogger<LoginModel> _logger;
+    private readonly IWebHostEnvironment _environment;
 
     [BindProperty]
     [Required(ErrorMessage = "Email is required")]
@@ -40,11 +42,16 @@ public class LoginModel : PageModel
     public string GoogleClientId => _configuration["GoogleAuth:ClientId"] ?? "";
 
     /// <summary>Injects the HTTP client factory, application configuration, and structured logger.</summary>
-    public LoginModel(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<LoginModel> logger)
+    public LoginModel(
+        IHttpClientFactory httpClientFactory,
+        IConfiguration configuration,
+        ILogger<LoginModel> logger,
+        IWebHostEnvironment environment)
     {
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
         _logger = logger;
+        _environment = environment;
     }
 
     public void OnGet(string? returnUrl = null)
@@ -55,7 +62,8 @@ public class LoginModel : PageModel
 
     public async Task<IActionResult> OnPostAsync(string? returnUrl = null)
     {
-        returnUrl ??= "/";
+        if (!IsLocalRedirectUrl(returnUrl))
+            returnUrl = "/";
 
         if (!ModelState.IsValid)
             return Page();
@@ -83,15 +91,10 @@ public class LoginModel : PageModel
                 {
                     // Store raw JWT in a cookie so other page models (e.g. OrdersModel)
                     // can attach it as a Bearer token when calling the internal API.
-                    var cookieOptions = new CookieOptions
-                    {
-                        HttpOnly = true,
-                        Secure = Request.IsHttps,
-                        SameSite = SameSiteMode.Lax,
-                        Expires = RememberMe
-                            ? DateTimeOffset.UtcNow.AddDays(30)
-                            : DateTimeOffset.UtcNow.AddHours(8)
-                    };
+                    var cookieExpires = RememberMe
+                        ? DateTimeOffset.UtcNow.AddDays(30)
+                        : DateTimeOffset.UtcNow.AddHours(8);
+                    var cookieOptions = AuthTokenCookieHelper.Create(HttpContext, _environment, cookieExpires);
                     Response.Cookies.Append("AuthToken", result.Token, cookieOptions);
 
                     // Build a cookie identity with standard ClaimTypes from the JWT.
@@ -113,8 +116,8 @@ public class LoginModel : PageModel
                             AllowRefresh = true
                         });
 
-                    _logger.LogInformation("Login successful for {Email}, redirecting to {ReturnUrl}", Email, returnUrl);
-                    return Redirect(returnUrl);
+                    _logger.LogInformation("Login successful");
+                    return Redirect(returnUrl ?? "/");
                 }
 
                 ErrorMessage = "Login successful but authentication failed. Please try again.";
@@ -129,28 +132,33 @@ public class LoginModel : PageModel
             }
             else
             {
-                _logger.LogWarning("Login API returned {StatusCode} for {Email}", response.StatusCode, Email);
+                _logger.LogWarning("Login API returned status {StatusCode}", response.StatusCode);
                 ErrorMessage = $"An error occurred during login ({response.StatusCode}). Please try again.";
             }
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "HTTP error during login for {Email}", Email);
+            _logger.LogError(ex, "HTTP error during login");
             ErrorMessage = "Unable to connect to the authentication server. Please check your connection.";
         }
         catch (JsonException ex)
         {
-            _logger.LogError(ex, "JSON parse error during login for {Email}", Email);
+            _logger.LogError(ex, "JSON parse error during login");
             ErrorMessage = "Received invalid response from server. Please try again.";
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unexpected error during login for {Email}", Email);
+            _logger.LogError(ex, "Unexpected error during login");
             ErrorMessage = "An unexpected error occurred. Please try again.";
         }
 
         return Page();
     }
+
+    private static bool IsLocalRedirectUrl(string? url) =>
+        !string.IsNullOrEmpty(url) &&
+        url[0] == '/' &&
+        (url.Length == 1 || (url[1] != '/' && url[1] != '\\'));
 
     private sealed class AuthResponse
     {

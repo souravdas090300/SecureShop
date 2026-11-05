@@ -44,7 +44,7 @@
                                         </div>
                                         <div class="col-md-3">
                                             <span class="badge @GetStatusBadgeClass(order.Status) px-3 py-2">
-                                                @order.Status
+                                                @GetStatusLabel(order.Status)
                                             </span>
                                         </div>
                                         <div class="col-md-3 text-end">
@@ -122,11 +122,21 @@
         return status?.ToLower() switch
         {
             "pending" => "bg-warning text-dark",
-            "processing" => "bg-info text-white",
+            "paymentprocessing" => "bg-info text-white",
+            "paid" => "bg-success text-white",
             "shipped" => "bg-primary text-white",
             "delivered" => "bg-success text-white",
             "cancelled" => "bg-danger text-white",
             _ => "bg-secondary text-white"
+        };
+    }
+
+    private string GetStatusLabel(string status)
+    {
+        return status?.ToLower() switch
+        {
+            "paymentprocessing" => "Payment processing",
+            _ => status ?? string.Empty
         };
     }
 }

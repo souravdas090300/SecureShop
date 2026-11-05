@@ -1,10 +1,19 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace SecureShop.API.Pages.Account;
 
 public class AuthTestModel : PageModel
 {
+    private readonly IWebHostEnvironment _environment;
+
+    public AuthTestModel(IWebHostEnvironment environment)
+    {
+        _environment = environment;
+    }
+
     public bool IsAuthenticated { get; set; }
     public string UserName { get; set; } = string.Empty;
     public string AuthenticationType { get; set; } = string.Empty;
@@ -14,8 +23,11 @@ public class AuthTestModel : PageModel
     public int ClaimCount { get; set; }
     public Dictionary<string, string> Claims { get; set; } = new();
 
-    public void OnGet()
+    public IActionResult OnGet()
     {
+        if (!_environment.IsDevelopment())
+            return NotFound();
+
         IsAuthenticated = User.Identity?.IsAuthenticated ?? false;
         UserName = User.Identity?.Name ?? "(null)";
         AuthenticationType = User.Identity?.AuthenticationType ?? "(null)";
@@ -29,5 +41,7 @@ public class AuthTestModel : PageModel
             ClaimCount = User.Claims.Count();
             Claims = User.Claims.ToDictionary(c => c.Type, c => c.Value);
         }
+
+        return Page();
     }
 }

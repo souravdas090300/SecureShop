@@ -73,10 +73,6 @@
         <div class="card-body">
             <table class="table" id="clientInfo">
                 <tr>
-                    <th>Cookies:</th>
-                    <td id="cookieList">Loading...</td>
-                </tr>
-                <tr>
                     <th>User Agent:</th>
                     <td id="userAgent">Loading...</td>
                 </tr>
@@ -96,8 +92,6 @@
 
 @section Scripts {
     <script>
-        // Display client-side cookies
-        document.getElementById('cookieList').textContent = document.cookie || '(none visible to JavaScript)';
         document.getElementById('userAgent').textContent = navigator.userAgent;
         
         // Test API authentication

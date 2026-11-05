@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -118,7 +119,9 @@ public class AccountAuthTestModelTests
     [Fact]
     public void OnGet_Authenticated_SetsAllProperties()
     {
-        var model = new SecureShop.API.Pages.Account.AuthTestModel();
+        var environment = new Mock<IWebHostEnvironment>();
+        environment.Setup(value => value.EnvironmentName).Returns("Development");
+        var model = new SecureShop.API.Pages.Account.AuthTestModel(environment.Object);
         var claims = new List<Claim>
         {
             new(ClaimTypes.Name,           "testuser"),
@@ -132,7 +135,7 @@ public class AccountAuthTestModelTests
         };
         AccountTestHelper.SetupPageContext(model, ctx);
 
-        model.OnGet();
+        model.OnGet().Should().BeOfType<PageResult>();
 
         model.IsAuthenticated.Should().BeTrue();
         model.Email.Should().Be("auth@example.com");
@@ -145,10 +148,12 @@ public class AccountAuthTestModelTests
     [Fact]
     public void OnGet_Unauthenticated_SetsNotFoundStrings()
     {
-        var model = new SecureShop.API.Pages.Account.AuthTestModel();
+        var environment = new Mock<IWebHostEnvironment>();
+        environment.Setup(value => value.EnvironmentName).Returns("Development");
+        var model = new SecureShop.API.Pages.Account.AuthTestModel(environment.Object);
         AccountTestHelper.SetupPageContext(model, new DefaultHttpContext());
 
-        model.OnGet();
+        model.OnGet().Should().BeOfType<PageResult>();
 
         model.IsAuthenticated.Should().BeFalse();
         model.Email.Should().Be("(not found)");
@@ -199,12 +204,21 @@ public class AccountLogoutModelTests
 
 public class AccountLoginModelTests
 {
-    private static LoginModel CreateModel(HttpResponseMessage response, IConfiguration? config = null)
+    private static LoginModel CreateModel(
+        HttpResponseMessage response,
+        IConfiguration? config = null,
+        string environmentName = "Development")
     {
         var handler = new FakeHttpMessageHandler(response);
         var factory = new Mock<IHttpClientFactory>();
         factory.Setup(f => f.CreateClient(It.IsAny<string>())).Returns(new HttpClient(handler));
-        return new LoginModel(factory.Object, config ?? new Mock<IConfiguration>().Object, new Mock<ILogger<LoginModel>>().Object);
+        var environment = new Mock<IWebHostEnvironment>();
+        environment.Setup(e => e.EnvironmentName).Returns(environmentName);
+        return new LoginModel(
+            factory.Object,
+            config ?? new Mock<IConfiguration>().Object,
+            new Mock<ILogger<LoginModel>>().Object,
+            environment.Object);
     }
 
     [Fact]
@@ -249,11 +263,11 @@ public class AccountLoginModelTests
     }
 
     [Fact]
-    public async Task OnPostAsync_ApiSuccess_SignsInAndRedirects()
+    public async Task OnPostAsync_ApiSuccess_SignsInAndSetsSecureCookieInProduction()
     {
         var jwt = AccountTestHelper.CreateJwt();
         var payload = new { token = jwt, email = "test@example.com", firstName = "Test", lastName = "User" };
-        var model = CreateModel(PageModelTestHelper.JsonOk(payload));
+        var model = CreateModel(PageModelTestHelper.JsonOk(payload), environmentName: "Production");
         model.Email    = "test@example.com";
         model.Password = "Password123!";
 
@@ -261,12 +275,30 @@ public class AccountLoginModelTests
         AccountTestHelper.SetupPageContext(model, ctx);
         model.TempData = AccountTestHelper.EmptyTempData(ctx);
 
-        var result = await model.OnPostAsync();
+        var result = await model.OnPostAsync("/checkout");
 
-        result.Should().BeOfType<RedirectResult>();
+        result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be("/checkout");
+        ctx.Response.Headers["Set-Cookie"].ToString().ToLowerInvariant().Should().Contain("; secure;");
         authSvc.Verify(s => s.SignInAsync(
             It.IsAny<HttpContext>(), It.IsAny<string?>(),
             It.IsAny<ClaimsPrincipal>(), It.IsAny<AuthenticationProperties?>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task OnPostAsync_ExternalReturnUrl_RedirectsToRoot()
+    {
+        var jwt = AccountTestHelper.CreateJwt();
+        var payload = new { token = jwt, email = "test@example.com", firstName = "Test", lastName = "User" };
+        var model = CreateModel(PageModelTestHelper.JsonOk(payload));
+        model.Email = "test@example.com";
+        model.Password = "Password123!";
+        var (ctx, _) = AccountTestHelper.CreateContextWithAuth();
+        AccountTestHelper.SetupPageContext(model, ctx);
+        model.TempData = AccountTestHelper.EmptyTempData(ctx);
+
+        var result = await model.OnPostAsync("https://attacker.example");
+
+        result.Should().BeOfType<RedirectResult>().Which.Url.Should().Be("/");
     }
 
     [Fact]
@@ -338,7 +370,13 @@ public class AccountLoginModelTests
         var factory = new Mock<IHttpClientFactory>();
         factory.Setup(f => f.CreateClient(It.IsAny<string>()))
                .Throws(new HttpRequestException("no network"));
-        var model = new LoginModel(factory.Object, new Mock<IConfiguration>().Object, new Mock<ILogger<LoginModel>>().Object);
+        var environment = new Mock<IWebHostEnvironment>();
+        environment.Setup(e => e.EnvironmentName).Returns("Development");
+        var model = new LoginModel(
+            factory.Object,
+            new Mock<IConfiguration>().Object,
+            new Mock<ILogger<LoginModel>>().Object,
+            environment.Object);
         model.Email    = "test@example.com";
         model.Password = "Pass123!";
         PageModelTestHelper.SetupHttpContext(model);
@@ -388,7 +426,8 @@ public class AccountRegisterModelTests
             config ?? new Mock<IConfiguration>().Object,
             new Mock<ILogger<RegisterModel>>().Object,
             um.Object,
-            email.Object);
+            email.Object,
+            new Mock<IWebHostEnvironment>().Object);
         return (model, um);
     }
 
@@ -559,7 +598,8 @@ public class AccountRegisterModelTests
             new Mock<IConfiguration>().Object,
             new Mock<ILogger<RegisterModel>>().Object,
             um.Object,
-            email.Object);
+            email.Object,
+            new Mock<IWebHostEnvironment>().Object);
         FillValidForm(model);
         PageModelTestHelper.SetupHttpContext(model);
         model.TempData = AccountTestHelper.EmptyTempData();
@@ -597,48 +637,54 @@ public class AccountRegisterModelTests
 
 public class GoogleCallbackModelTests
 {
-    private static GoogleCallbackModel CreateGoogleModel() =>
-        new GoogleCallbackModel(new Mock<ILogger<GoogleCallbackModel>>().Object);
+    private static GoogleCallbackModel CreateGoogleModel(string environmentName = "Development")
+    {
+        var environment = new Mock<IWebHostEnvironment>();
+        environment.Setup(e => e.EnvironmentName).Returns(environmentName);
+        return new GoogleCallbackModel(
+            new Mock<ILogger<GoogleCallbackModel>>().Object,
+            environment.Object);
+    }
 
     [Fact]
-    public async Task OnGetAsync_NullToken_RedirectsToAccountLogin()
+    public void OnGet_RedirectsToAccountLogin()
     {
         var model = CreateGoogleModel();
         var (ctx, _) = AccountTestHelper.CreateContextWithAuth();
         AccountTestHelper.SetupPageContext(model, ctx);
 
-        var result = await model.OnGetAsync(null);
+        var result = model.OnGet();
 
         result.Should().BeOfType<RedirectToPageResult>()
             .Which.PageName.Should().Be("/Account/Login");
     }
 
     [Fact]
-    public async Task OnGetAsync_ValidJwt_SignsInAndRedirectsToRoot()
+    public async Task OnPostAsync_ValidJwt_SignsInAndRedirectsToRootWithSecureTokenCookieInProduction()
     {
         var jwt = AccountTestHelper.CreateJwt();
-        var model = CreateGoogleModel();
+        var model = CreateGoogleModel("Production");
         var (ctx, authSvc) = AccountTestHelper.CreateContextWithAuth();
         AccountTestHelper.SetupPageContext(model, ctx);
 
-        var result = await model.OnGetAsync(jwt);
+        var result = await model.OnPostAsync(jwt);
 
         result.Should().BeOfType<RedirectResult>()
             .Which.Url.Should().Be("/");
+        ctx.Response.Headers["Set-Cookie"].ToString().ToLowerInvariant().Should().Contain("; secure;");
         authSvc.Verify(s => s.SignInAsync(
             It.IsAny<HttpContext>(), It.IsAny<string?>(),
             It.IsAny<ClaimsPrincipal>(), It.IsAny<AuthenticationProperties?>()), Times.Once);
     }
 
     [Fact]
-    public async Task OnGetAsync_InvalidJwt_RedirectsToAccountLogin()
+    public async Task OnPostAsync_InvalidJwt_RedirectsToAccountLogin()
     {
         var model = CreateGoogleModel();
         var (ctx, _) = AccountTestHelper.CreateContextWithAuth();
         AccountTestHelper.SetupPageContext(model, ctx);
 
-        // "invalid" has no dots → ReadJwtToken throws → catch block → redirect
-        var result = await model.OnGetAsync("invalid");
+        var result = await model.OnPostAsync("invalid");
 
         result.Should().BeOfType<RedirectToPageResult>()
             .Which.PageName.Should().Be("/Account/Login");
@@ -656,7 +702,12 @@ public class CheckoutModelTests
         var handler = new FakeHttpMessageHandler(response);
         var factory = new Mock<IHttpClientFactory>();
         factory.Setup(f => f.CreateClient(It.IsAny<string>())).Returns(new HttpClient(handler));
-        config ??= new Mock<IConfiguration>().Object;
+        config ??= new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Stripe:PublishableKey"] = "pk_test_checkout"
+            })
+            .Build();
         return new CheckoutModel(factory.Object, config, new Mock<ILogger<CheckoutModel>>().Object);
     }
 
@@ -722,9 +773,30 @@ public class CheckoutModelTests
     }
 
     [Fact]
+    public async Task OnPostAsync_WithoutTestPublishableKey_DoesNotCreateOrder()
+    {
+        var model = CreateModel(
+            PageModelTestHelper.ServerError(),
+            new ConfigurationBuilder().Build());
+        FillCheckoutForm(model);
+        PageModelTestHelper.SetupHttpContext(model);
+
+        var result = await model.OnPostAsync();
+
+        result.Should().BeOfType<PageResult>();
+        model.ErrorMessage.Should().Contain("Test-mode checkout is not configured");
+    }
+
+    [Fact]
     public async Task OnPostAsync_ApiSuccess_RedirectsToOrdersPage()
     {
-        var payload = new { id = "3fa85f64-5717-4562-b3fc-2c963f66afa6", status = "Paid", totalAmount = 99.99m };
+        var payload = new
+        {
+            id = "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            status = "PaymentProcessing",
+            totalAmount = 99.99m,
+            paymentClientSecret = "pi_test_client_secret"
+        };
         var model = CreateModel(PageModelTestHelper.JsonOk(payload));
         FillCheckoutForm(model);
 
@@ -736,8 +808,10 @@ public class CheckoutModelTests
 
         var result = await model.OnPostAsync();
 
-        result.Should().BeOfType<RedirectToPageResult>()
-            .Which.PageName.Should().Be("/Account/Orders");
+        result.Should().BeOfType<PageResult>();
+        model.OrderId.Should().Be(Guid.Parse("3fa85f64-5717-4562-b3fc-2c963f66afa6"));
+        model.OrderTotal.Should().Be(99.99m);
+        model.PaymentClientSecret.Should().Be("pi_test_client_secret");
     }
 
     [Fact]
@@ -777,7 +851,13 @@ public class CheckoutModelTests
     public async Task OnPostAsync_WithAuthTokenCookie_SetsAuthorizationHeaderAndSucceeds()
     {
         // Exercises the "!string.IsNullOrEmpty(token)" branch that sets the Bearer header
-        var payload = new { id = "3fa85f64-5717-4562-b3fc-2c963f66afa6", status = "Paid", totalAmount = 49.99m };
+        var payload = new
+        {
+            id = "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+            status = "PaymentProcessing",
+            totalAmount = 49.99m,
+            paymentClientSecret = "pi_test_client_secret"
+        };
         var model = CreateModel(PageModelTestHelper.JsonOk(payload));
         FillCheckoutForm(model);
 
@@ -790,8 +870,8 @@ public class CheckoutModelTests
 
         var result = await model.OnPostAsync();
 
-        result.Should().BeOfType<RedirectToPageResult>()
-            .Which.PageName.Should().Be("/Account/Orders");
+        result.Should().BeOfType<PageResult>();
+        model.PaymentClientSecret.Should().Be("pi_test_client_secret");
     }
 }
 

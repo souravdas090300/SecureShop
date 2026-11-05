@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -15,6 +16,7 @@ public class VerifyEmailModel : PageModel
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IAuthService _authService;
     private readonly ILogger<VerifyEmailModel> _logger;
+    private readonly IWebHostEnvironment _environment;
 
     [BindProperty] public string Email          { get; set; } = string.Empty;
     [BindProperty] public string PendingUserId  { get; set; } = string.Empty;
@@ -30,11 +32,13 @@ public class VerifyEmailModel : PageModel
     public VerifyEmailModel(
         UserManager<ApplicationUser> userManager,
         IAuthService authService,
-        ILogger<VerifyEmailModel> logger)
+        ILogger<VerifyEmailModel> logger,
+        IWebHostEnvironment environment)
     {
         _userManager = userManager;
         _authService = authService;
         _logger = logger;
+        _environment = environment;
     }
 
     public IActionResult OnGet()
@@ -104,13 +108,10 @@ public class VerifyEmailModel : PageModel
         // Generate JWT and sign in.
         var authResult = await _authService.GenerateTokenForUserAsync(user.Id);
 
-        var cookieOptions = new CookieOptions
-        {
-            HttpOnly = true,
-            Secure   = Request.IsHttps,
-            SameSite = SameSiteMode.Lax,
-            Expires  = DateTimeOffset.UtcNow.AddHours(8)
-        };
+        var cookieOptions = AuthTokenCookieHelper.Create(
+            HttpContext,
+            _environment,
+            DateTimeOffset.UtcNow.AddHours(8));
         Response.Cookies.Append("AuthToken", authResult.Token, cookieOptions);
 
         var principal = JwtCookieHelper.BuildPrincipal(
