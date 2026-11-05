@@ -38,10 +38,12 @@ public class ProductsController : ControllerBase
     public async Task<ActionResult<PagedProductsDto>> GetAll(
         [FromQuery] string? category, [FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
     {
+        if (page < 1 || pageSize is < 1 or > ProductService.MaximumPageSize)
+            return BadRequest(new { message = $"Page must be greater than zero and pageSize must be between 1 and {ProductService.MaximumPageSize}." });
+
         try
         {
-            _logger.LogInformation("Fetching products - Category: {Category}, Search: {Search}, Page: {Page}, PageSize: {PageSize}", 
-                category ?? "All", search ?? "", page, pageSize);
+            _logger.LogInformation("Fetching products - Page: {Page}, PageSize: {PageSize}", page, pageSize);
             
             var result = await _svc.GetAllAsync(category, search, page, pageSize);
             return Ok(result);

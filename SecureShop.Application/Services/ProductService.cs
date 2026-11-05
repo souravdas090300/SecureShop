@@ -12,6 +12,8 @@ namespace SecureShop.Application.Services;
 /// </summary>
 public class ProductService
 {
+    public const int MaximumPageSize = 50;
+
     private readonly IProductRepository _repo;
     private readonly ICacheService _cache;
 
@@ -36,6 +38,11 @@ public class ProductService
     /// <param name="pageSize">Number of items per page.</param>
     public async Task<PagedProductsDto> GetAllAsync(string? category, string? search, int page, int pageSize)
     {
+        if (page < 1)
+            throw new ArgumentOutOfRangeException(nameof(page), "Page must be greater than zero.");
+        if (pageSize is < 1 or > MaximumPageSize)
+            throw new ArgumentOutOfRangeException(nameof(pageSize), $"Page size must be between 1 and {MaximumPageSize}.");
+
         // Build a deterministic cache key that includes every query dimension.
         var cacheKey = $"{CachePrefix}list:{category}:{search}:{page}:{pageSize}";
         var cached = await _cache.GetAsync<PagedProductsDto>(cacheKey);

@@ -6,7 +6,6 @@ namespace SecureShop.API.Middleware;
 /// Headers always applied:
 /// <list type="bullet">
 ///   <item><c>X-Content-Type-Options: nosniff</c> — prevents MIME sniffing.</item>
-///   <item><c>X-XSS-Protection: 1; mode=block</c> — legacy XSS filter in older browsers.</item>
 ///   <item><c>Referrer-Policy: strict-origin-when-cross-origin</c></item>
 ///   <item><c>Permissions-Policy</c> — disables camera, microphone, and geolocation APIs.</item>
 ///   <item><c>Content-Security-Policy</c> — environment-specific CSP (see below).</item>
@@ -46,7 +45,6 @@ public class SecurityHeadersMiddleware
 
         var h = context.Response.Headers;
         h["X-Content-Type-Options"] = "nosniff";
-        h["X-XSS-Protection"] = "1; mode=block";
         h["Referrer-Policy"] = "strict-origin-when-cross-origin";
         h["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
 
@@ -56,12 +54,12 @@ public class SecurityHeadersMiddleware
             h["X-Frame-Options"] = "SAMEORIGIN";
             h["Content-Security-Policy"] =
                 "default-src 'self'; " +
-                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://accounts.google.com https://code.jquery.com; " +
+                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://accounts.google.com https://code.jquery.com https://js.stripe.com; " +
                 "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://accounts.google.com; " +
                 "img-src 'self' data: https:; " +
                 "font-src 'self' data: https://cdnjs.cloudflare.com; " +
-                "connect-src 'self' https://localhost:5001 http://localhost:5000 http://localhost:8080 https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://accounts.google.com https://api.cloudinary.com; " +
-                "frame-src 'self' https://accounts.google.com https://*.google.com; " +
+                "connect-src 'self' https://localhost:5001 http://localhost:5000 http://localhost:8080 https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://accounts.google.com https://api.cloudinary.com https://api.stripe.com https://m.stripe.network https://r.stripe.com; " +
+                "frame-src 'self' https://accounts.google.com https://*.google.com https://js.stripe.com https://hooks.stripe.com; " +
                 "frame-ancestors 'self';";
         }
         else
@@ -71,12 +69,12 @@ public class SecurityHeadersMiddleware
             h["X-Frame-Options"] = "DENY";
             h["Content-Security-Policy"] =
                 "default-src 'self'; " +
-                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://accounts.google.com https://code.jquery.com; " +
+                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://accounts.google.com https://code.jquery.com https://js.stripe.com; " +
                 "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://accounts.google.com; " +
                 "img-src 'self' data: https:; " +
                 "font-src 'self' data: https://cdnjs.cloudflare.com; " +
-                "connect-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://accounts.google.com https://api.cloudinary.com; " +
-                "frame-src 'self' https://accounts.google.com https://*.google.com; " +
+                "connect-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://accounts.google.com https://api.cloudinary.com https://api.stripe.com https://m.stripe.network https://r.stripe.com; " +
+                "frame-src 'self' https://accounts.google.com https://*.google.com https://js.stripe.com https://hooks.stripe.com; " +
                 "base-uri 'self'; " +
                 "form-action 'self'; " +
                 "frame-ancestors 'none';";

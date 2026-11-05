@@ -75,6 +75,22 @@ public class ProductsControllerTests
         repo.Verify(r => r.GetAllAsync(null, "laptop", 1, 10), Times.Once);
     }
 
+    [Theory]
+    [InlineData(0, 10)]
+    [InlineData(1, 0)]
+    [InlineData(1, 51)]
+    public async Task GetAll_InvalidPagination_ReturnsBadRequest(int page, int pageSize)
+    {
+        var repo = new Mock<IProductRepository>();
+        var cache = new Mock<ICacheService>();
+        var controller = MakeController(MakeSvc(repo, cache));
+
+        var result = await controller.GetAll(null, null, page, pageSize);
+
+        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        repo.Verify(r => r.GetAllAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>()), Times.Never);
+    }
+
     [Fact]
     public async Task GetAll_WhenExceptionThrown_Returns500()
     {

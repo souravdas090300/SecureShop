@@ -129,7 +129,7 @@ public class SecurityHeadersMiddlewareTests
         var headers = await InvokeAsync("/products", Env("Production"));
 
         headers["X-Content-Type-Options"].ToString().Should().Be("nosniff");
-        headers["X-XSS-Protection"].ToString().Should().Be("1; mode=block");
+        headers.ContainsKey("X-XSS-Protection").Should().BeFalse();
         headers["Referrer-Policy"].ToString().Should().Be("strict-origin-when-cross-origin");
     }
 
@@ -155,6 +155,17 @@ public class SecurityHeadersMiddlewareTests
         var headers = await InvokeAsync("/home", Env("Production"));
 
         headers["Content-Security-Policy"].ToString().Should().Contain("frame-ancestors 'none'");
+    }
+
+    [Fact]
+    public async Task RegularPath_Production_CspAllowsStripePaymentElement()
+    {
+        var headers = await InvokeAsync("/checkout", Env("Production"));
+        var policy = headers["Content-Security-Policy"].ToString();
+
+        policy.Should().Contain("script-src").And.Contain("https://js.stripe.com");
+        policy.Should().Contain("frame-src").And.Contain("https://hooks.stripe.com");
+        policy.Should().Contain("connect-src").And.Contain("https://api.stripe.com");
     }
 
     [Fact]
