@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: secureshop_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Unit tests
+        run: dotnet test SecureShop.UnitTests/SecureShop.UnitTests.csproj --nologo
+
+      - name: Integration tests (incl. stock concurrency test)
+        run: dotnet test SecureShop.IntegrationTests/SecureShop.IntegrationTests.csproj --nologo
+        env:
+          # The concurrency test throws in CI if this is unset, so the job
+          # fails rather than silently skipping.
+          SECURESHOP_TEST_DATABASE_URL: Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=secureshop_test;SSL Mode=Disable

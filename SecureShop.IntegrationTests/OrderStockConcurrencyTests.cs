@@ -30,7 +30,14 @@ public class OrderStockConcurrencyTests
     public async Task ConcurrentOrders_NeverOversell()
     {
         if (string.IsNullOrWhiteSpace(_connectionString))
+        {
+            // In CI a missing connection string must fail loudly — a silent
+            // skip would let an overselling regression ship undetected.
+            if (Environment.GetEnvironmentVariable("CI") == "true")
+                throw new InvalidOperationException(
+                    "SECURESHOP_TEST_DATABASE_URL is not set; the stock concurrency test cannot be skipped in CI.");
             return; // No test database configured — nothing to verify against.
+        }
 
         // appsettings.json ships "DefaultConnection": "" which would win over the
         // in-memory override below, so set the environment variable instead —
