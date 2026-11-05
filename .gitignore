@@ -67,3 +67,6 @@ SecureShop.API/appsettings.Local.json
 
 # Published output — never commit
 out/
+# Data Protection key ring artifacts (keys live in PostgreSQL)
+App_Data/
+SecureShop.API/App_Data/
