@@ -11,6 +11,9 @@ public interface IOrderRepository
     /// <summary>Returns the order with the given <paramref name="id"/>, or <c>null</c> if not found.</summary>
     Task<Order?> GetByIdAsync(Guid id);
 
+    /// <summary>Finds an order by its Stripe PaymentIntent ID.</summary>
+    Task<Order?> GetByPaymentIntentIdAsync(string paymentIntentId, CancellationToken cancellationToken = default);
+
     /// <summary>Returns all orders belonging to the specified user, newest first.</summary>
     Task<IEnumerable<Order>> GetByUserIdAsync(string userId);
 
@@ -23,5 +26,5 @@ public interface IOrderRepository
     Task<Order> CreateAsync(Order order);
 
     /// <summary>Persists changes to an existing <see cref="Order"/> (e.g. status updates).</summary>
-    Task UpdateAsync(Order order);
+    Task UpdateAsync(Order order, CancellationToken cancellationToken = default);
 }

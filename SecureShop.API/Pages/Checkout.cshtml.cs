@@ -75,6 +75,10 @@ public class CheckoutModel : PageModel
     public string CartItemsJson { get; set; } = string.Empty;
 
     public string? ErrorMessage { get; set; }
+    public string? StripePublishableKey { get; private set; }
+    public string? PaymentClientSecret { get; private set; }
+    public Guid? OrderId { get; private set; }
+    public decimal? OrderTotal { get; private set; }
 
     public CheckoutModel(IHttpClientFactory httpClientFactory, IConfiguration configuration, ILogger<CheckoutModel> logger)
     {
@@ -85,6 +89,8 @@ public class CheckoutModel : PageModel
 
     public void OnGet()
     {
+        StripePublishableKey = _configuration["Stripe:PublishableKey"];
+
         // Pre-fill user information if available
         if (User.Identity?.IsAuthenticated == true)
         {
@@ -94,8 +100,16 @@ public class CheckoutModel : PageModel
         }
     }
 
-    public async Task<IActionResult> OnPostAsync()
+    public async Task<IActionResult> OnPostAsync(CancellationToken cancellationToken = default)
     {
+        StripePublishableKey = _configuration["Stripe:PublishableKey"];
+        if (string.IsNullOrWhiteSpace(StripePublishableKey) ||
+            !StripePublishableKey.StartsWith("pk_test_", StringComparison.Ordinal))
+        {
+            ErrorMessage = "Test-mode checkout is not configured. Please contact the store administrator.";
+            return Page();
+        }
+
         // Deserialise cart items before model-state validation so we can show
         // a friendly error if the cart is empty or malformed.
         List<CartItemRequest> cartItems;
@@ -144,7 +158,7 @@ public class CheckoutModel : PageModel
             var json = JsonSerializer.Serialize(orderData);
             var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-            var response = await client.PostAsync($"{baseUrl}/api/orders", content);
+            var response = await client.PostAsync($"{baseUrl}/api/orders", content, cancellationToken);
 
             if (response.IsSuccessStatusCode)
             {
@@ -154,28 +168,32 @@ public class CheckoutModel : PageModel
                     PropertyNameCaseInsensitive = true
                 });
 
-                if (result != null && result.Id != Guid.Empty)
+                if (result != null && result.Id != Guid.Empty &&
+                    !string.IsNullOrWhiteSpace(result.PaymentClientSecret))
                 {
-                    TempData["SuccessMessage"] = $"Order #{result.Id} placed successfully!";
-                    TempData["OrderId"] = result.Id.ToString();
-                    return RedirectToPage("/Account/Orders");
+                    OrderId = result.Id;
+                    OrderTotal = result.TotalAmount;
+                    PaymentClientSecret = result.PaymentClientSecret;
+                    return Page();
                 }
+
+                _logger.LogError("Order API response omitted the payment details");
+                ErrorMessage = "The order was created, but payment could not be started. Contact support before retrying.";
             }
             else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
-                _logger.LogWarning("Order creation returned 401 for user {Email} — AuthToken missing or expired", Email);
+                _logger.LogWarning("Order creation returned 401; the authentication token was missing or expired");
                 ErrorMessage = "Your session has expired. Please log out and log in again, then try checking out.";
             }
             else
             {
-                var errorContent = await response.Content.ReadAsStringAsync();
-                _logger.LogWarning("Order creation failed ({StatusCode}): {Body}", response.StatusCode, errorContent);
+                _logger.LogWarning("Order creation failed with status {StatusCode}", response.StatusCode);
                 ErrorMessage = "Failed to process your order. Please try again.";
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Checkout error for user {Email}", Email);
+            _logger.LogError(ex, "Checkout order creation failed");
             ErrorMessage = "An error occurred while processing your order. Please try again.";
         }
 
@@ -194,5 +212,6 @@ public class CheckoutModel : PageModel
         public Guid Id { get; set; }
         public string? Status { get; set; }
         public decimal TotalAmount { get; set; }
+        public string? PaymentClientSecret { get; set; }
     }
 }

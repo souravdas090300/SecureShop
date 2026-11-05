@@ -10,6 +10,7 @@ using SecureShop.Application.Services;
 using SecureShop.Domain.Entities;
 using SecureShop.Domain.Enums;
 using SecureShop.Domain.Exceptions;
+using SecureShop.Infrastructure.Services;
 using System.Security.Claims;
 
 namespace SecureShop.UnitTests;
@@ -17,7 +18,7 @@ namespace SecureShop.UnitTests;
 public class OrdersControllerTests
 {
     private static OrderService MakeSvc(Mock<IOrderRepository> orderRepo, Mock<IProductRepository> productRepo, Mock<IPaymentService> payment)
-        => new(orderRepo.Object, productRepo.Object, payment.Object);
+        => new(orderRepo.Object, productRepo.Object, payment.Object, new NullCacheService(), NullLogger<OrderService>.Instance);
 
     private static OrdersController MakeController(OrderService svc, string userId = "user-1")
     {
@@ -118,11 +119,12 @@ public class OrdersControllerTests
         var product = Product.Create("Widget", "desc", 9.99m, 10, "Electronics");
         var productRepo = new Mock<IProductRepository>();
         productRepo.Setup(r => r.GetByIdAsync(product.Id)).ReturnsAsync(product);
-        productRepo.Setup(r => r.UpdateAsync(It.IsAny<Product>())).Returns(Task.CompletedTask);
+        productRepo.Setup(r => r.TryReserveStockAsync(product.Id, 1, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
 
         var payment = new Mock<IPaymentService>();
         payment.Setup(p => p.CreatePaymentIntentAsync(It.IsAny<decimal>(), "usd", It.IsAny<Guid>()))
-               .ReturnsAsync("pi_secret");
+               .ReturnsAsync(new PaymentIntentDetails("pi_test_123", "pi_test_123_secret"));
 
         var orderRepo = new Mock<IOrderRepository>();
         orderRepo.Setup(r => r.CreateAsync(It.IsAny<Order>())).ReturnsAsync((Order o) => o);
@@ -156,9 +158,12 @@ public class OrdersControllerTests
     public async Task UpdateStatus_OrderExists_ReturnsNoContent()
     {
         var order = MakeOrder();
+        order.SetPaymentIntent("pi_test_123");
+        order.MarkAsPaid();
         var orderRepo = new Mock<IOrderRepository>();
         orderRepo.Setup(r => r.GetByIdAsync(order.Id)).ReturnsAsync(order);
-        orderRepo.Setup(r => r.UpdateAsync(It.IsAny<Order>())).Returns(Task.CompletedTask);
+        orderRepo.Setup(r => r.UpdateAsync(It.IsAny<Order>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         var controller = MakeController(MakeSvc(orderRepo, new Mock<IProductRepository>(), new Mock<IPaymentService>()));
         var result = await controller.UpdateStatus(order.Id, new UpdateOrderStatusDto((int)OrderStatus.Shipped));
@@ -221,20 +226,20 @@ public class OrdersControllerTests
     }
 
     [Fact]
-    public async Task Create_InvalidOperationException_Returns400()
+    public async Task Create_WhenStockReservationAndRollbackFail_Returns500()
     {
         var product = Product.Create("Widget", "desc", 9.99m, 5, "Electronics");
         var productRepo = new Mock<IProductRepository>();
         productRepo.Setup(r => r.GetByIdAsync(product.Id)).ReturnsAsync(product);
-        productRepo.Setup(r => r.UpdateAsync(It.IsAny<Product>()))
-                   .ThrowsAsync(new InvalidOperationException("concurrent update conflict"));
+        productRepo.Setup(r => r.TryReserveStockAsync(product.Id, 1, It.IsAny<CancellationToken>()))
+                   .ThrowsAsync(new Exception("reservation store unavailable"));
 
         var controller = MakeController(MakeSvc(new Mock<IOrderRepository>(), productRepo, new Mock<IPaymentService>()));
         var dto = new CreateOrderDto([new OrderItemDto(product.Id, 1)]);
 
         var result = await controller.Create(dto);
 
-        result.Result.Should().BeOfType<BadRequestObjectResult>();
+        result.Result.Should().BeOfType<ObjectResult>().Which.StatusCode.Should().Be(500);
     }
 
     [Fact]

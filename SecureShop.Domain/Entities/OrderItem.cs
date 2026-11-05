@@ -1,3 +1,5 @@
+using SecureShop.Domain.Exceptions;
+
 namespace SecureShop.Domain.Entities;
 
 /// <summary>
@@ -37,6 +39,11 @@ public class OrderItem
     /// <returns>A new, fully initialised <see cref="OrderItem"/>.</returns>
     public static OrderItem Create(Guid productId, int quantity, decimal unitPrice)
     {
+        if (quantity <= 0)
+            throw new DomainException("Order item quantity must be greater than zero");
+        if (unitPrice <= 0)
+            throw new DomainException("Order item unit price must be greater than zero");
+
         return new OrderItem
         {
             Id = Guid.NewGuid(),

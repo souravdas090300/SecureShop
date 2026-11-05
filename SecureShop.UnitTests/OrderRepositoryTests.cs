@@ -98,6 +98,21 @@ public class OrderRepositoryTests : EfTestBase
         result.Should().BeNull();
     }
 
+    [Fact]
+    public async Task GetByPaymentIntentIdAsync_FindsMatchingOrder()
+    {
+        await SeedUserAsync("user-1");
+        var order = MakeOrder("user-1");
+        order.SetPaymentIntent("pi_test_123");
+        Db.Orders.Add(order);
+        await Db.SaveChangesAsync();
+
+        var result = await Repo().GetByPaymentIntentIdAsync("pi_test_123");
+
+        result.Should().NotBeNull();
+        result!.Id.Should().Be(order.Id);
+    }
+
     // ─── GetByUserIdAsync ─────────────────────────────────────────────────────
 
     [Fact]
@@ -157,6 +172,7 @@ public class OrderRepositoryTests : EfTestBase
         Db.Orders.Add(order);
         await Db.SaveChangesAsync();
 
+        order.SetPaymentIntent("pi_test_123");
         order.MarkAsPaid();
         await Repo().UpdateAsync(order);
 

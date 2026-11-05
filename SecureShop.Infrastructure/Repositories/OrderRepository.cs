@@ -23,6 +23,14 @@ public class OrderRepository : IOrderRepository
             .FirstOrDefaultAsync(o => o.Id == id);
 
     /// <inheritdoc />
+    public async Task<Order?> GetByPaymentIntentIdAsync(
+        string paymentIntentId,
+        CancellationToken cancellationToken = default) =>
+        await _db.Orders.FirstOrDefaultAsync(
+            o => o.StripePaymentIntentId == paymentIntentId,
+            cancellationToken);
+
+    /// <inheritdoc />
     public async Task<IEnumerable<Order>> GetByUserIdAsync(string userId) =>
         await _db.Orders.Include(o => o.Items).ThenInclude(i => i.Product)
             .Include(o => o.User)
@@ -45,9 +53,9 @@ public class OrderRepository : IOrderRepository
     }
 
     /// <inheritdoc />
-    public async Task UpdateAsync(Order order)
+    public async Task UpdateAsync(Order order, CancellationToken cancellationToken = default)
     {
         _db.Orders.Update(order);
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(cancellationToken);
     }
 }

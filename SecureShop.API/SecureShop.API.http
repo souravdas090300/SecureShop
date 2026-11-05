@@ -4,3 +4,12 @@ GET {{SecureShopAPI_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###
+
+### Stripe webhook (replace the invalid signature with Stripe CLI forwarding for test events)
+POST {{SecureShopAPI_HostAddress}}/api/webhooks/stripe
+Content-Type: application/json
+Stripe-Signature: invalid
+
+{}
+
+### Expected: 400 Bad Request for the invalid signature above.

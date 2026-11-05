@@ -12,33 +12,52 @@ namespace SecureShop.Infrastructure.Services;
 /// </summary>
 public class PaymentService : IPaymentService
 {
-    /// <summary>
-    /// Reads the Stripe secret key from configuration (<c>Stripe:SecretKey</c>)
-    /// and configures the global Stripe API client.
-    /// </summary>
-    public PaymentService(IConfiguration config)
-    {
-        StripeConfiguration.ApiKey = config["Stripe:SecretKey"];
-    }
+    private readonly IConfiguration _configuration;
+
+    /// <summary>Reads Stripe settings from application configuration.</summary>
+    public PaymentService(IConfiguration configuration) => _configuration = configuration;
 
     /// <inheritdoc />
-    public async Task<string> CreatePaymentIntentAsync(decimal amount, string currency, Guid orderId)
+    public async Task<PaymentIntentDetails> CreatePaymentIntentAsync(decimal amount, string currency, Guid orderId)
     {
+        if (amount <= 0 || string.IsNullOrWhiteSpace(currency))
+            throw new ArgumentOutOfRangeException(nameof(amount), "A positive amount and currency are required.");
+
         var options = new PaymentIntentCreateOptions
         {
-            // Stripe expects the amount in the smallest currency unit (cents for USD).
-            Amount = (long)(amount * 100),
+            Amount = checked((long)decimal.Round(amount * 100m, 0, MidpointRounding.AwayFromZero)),
             Currency = currency,
-            // Metadata is returned in Stripe webhooks, enabling server-side order confirmation.
             Metadata = new Dictionary<string, string>
             {
                 { "orderId", orderId.ToString() }
             }
         };
 
-        var service = new PaymentIntentService();
-        var intent = await service.CreateAsync(options);
-        // The client secret is sent to the browser to complete payment via Stripe.js.
-        return intent.ClientSecret;
+        var service = CreateService();
+        var intent = await service.CreateAsync(options, new RequestOptions
+        {
+            IdempotencyKey = $"secure-shop-order-{orderId}"
+        });
+
+        return new PaymentIntentDetails(intent.Id, intent.ClientSecret);
+    }
+
+    /// <inheritdoc />
+    public async Task CancelPaymentIntentAsync(string paymentIntentId)
+    {
+        await CreateService().CancelAsync(paymentIntentId);
+    }
+
+    private PaymentIntentService CreateService()
+    {
+        var secretKey = _configuration["Stripe:SecretKey"];
+        if (string.IsNullOrWhiteSpace(secretKey) ||
+            !secretKey.StartsWith("sk_test_", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "Stripe test-mode payments require a Stripe:SecretKey beginning with sk_test_.");
+        }
+
+        return new PaymentIntentService(new StripeClient(secretKey));
     }
 }

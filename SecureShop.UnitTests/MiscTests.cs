@@ -336,7 +336,7 @@ public class OrderResponseDtoTests
         var dto      = new OrderResponseDto(
             id, "user-1", "customer@example.com",
             items, OrderStatus.Pending,
-            99.99m, "pi_stripe_secret", created);
+            99.99m, "pi_test_123", created, "pi_test_123_secret");
 
         dto.Id.Should().Be(id);
         dto.UserId.Should().Be("user-1");
@@ -344,8 +344,31 @@ public class OrderResponseDtoTests
         dto.Items.Should().BeSameAs(items);
         dto.Status.Should().Be(OrderStatus.Pending);
         dto.TotalAmount.Should().Be(99.99m);
-        dto.StripePaymentIntentId.Should().Be("pi_stripe_secret");
+        dto.StripePaymentIntentId.Should().Be("pi_test_123");
+        dto.PaymentClientSecret.Should().Be("pi_test_123_secret");
         dto.CreatedAt.Should().Be(created);
+    }
+
+    public class PaymentServiceTests
+    {
+        [Theory]
+        [InlineData(null)]
+        [InlineData("sk_live_not_allowed")]
+        public async Task CreatePaymentIntentAsync_RequiresTestModeSecretKey(string? secretKey)
+        {
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Stripe:SecretKey"] = secretKey
+                })
+                .Build();
+            var service = new PaymentService(configuration);
+
+            var act = () => service.CreatePaymentIntentAsync(10m, "usd", Guid.NewGuid());
+
+            await act.Should().ThrowAsync<InvalidOperationException>()
+                .WithMessage("*test-mode*");
+        }
     }
 }
 

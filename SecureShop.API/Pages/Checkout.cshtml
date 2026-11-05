@@ -9,7 +9,7 @@
         <div class="col-lg-8">
             <div class="card shadow-sm mb-4">
                 <div class="card-header bg-primary text-white">
-                    <h4 class="mb-0"><i class="fas fa-shipping-fast"></i> Shipping Information</h4>
+                    <h4 class="mb-0"><i class="fas fa-lock"></i> Secure Checkout</h4>
                 </div>
                 <div class="card-body">
                     @if (!string.IsNullOrEmpty(Model.ErrorMessage))
@@ -20,106 +20,80 @@
                     }
 
                     <form method="post" id="checkoutForm">
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label for="firstName" class="form-label">First Name *</label>
-                                <input type="text" class="form-control" id="firstName" name="FirstName" 
-                                       asp-for="FirstName" required>
+                        @if (string.IsNullOrEmpty(Model.PaymentClientSecret))
+                        {
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="firstName" class="form-label">First Name *</label>
+                                    <input type="text" class="form-control" id="firstName" asp-for="FirstName" required>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="lastName" class="form-label">Last Name *</label>
+                                    <input type="text" class="form-control" id="lastName" asp-for="LastName" required>
+                                </div>
                             </div>
-                            <div class="col-md-6 mb-3">
-                                <label for="lastName" class="form-label">Last Name *</label>
-                                <input type="text" class="form-control" id="lastName" name="LastName" 
-                                       asp-for="LastName" required>
+
+                            <div class="mb-3">
+                                <label for="email" class="form-label">Email Address *</label>
+                                <input type="email" class="form-control" id="email" asp-for="Email" required>
                             </div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="email" class="form-label">Email Address *</label>
-                            <input type="email" class="form-control" id="email" name="Email" 
-                                   asp-for="Email" required>
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="phone" class="form-label">Phone Number</label>
-                            <input type="tel" class="form-control" id="phone" name="Phone" 
-                                   asp-for="Phone" placeholder="+1 (555) 123-4567">
-                        </div>
-
-                        <hr class="my-4">
-
-                        <div class="mb-3">
-                            <label for="address" class="form-label">Street Address *</label>
-                            <input type="text" class="form-control" id="address" name="Address" 
-                                   asp-for="Address" placeholder="123 Main Street" required>
-                        </div>
-
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label for="city" class="form-label">City *</label>
-                                <input type="text" class="form-control" id="city" name="City" 
-                                       asp-for="City" required>
+                            <div class="mb-3">
+                                <label for="phone" class="form-label">Phone Number</label>
+                                <input type="tel" class="form-control" id="phone" asp-for="Phone" placeholder="+1 (555) 123-4567">
                             </div>
-                            <div class="col-md-3 mb-3">
-                                <label for="state" class="form-label">State *</label>
-                                <input type="text" class="form-control" id="state" name="State" 
-                                       asp-for="State" placeholder="CA" required>
+                            <hr class="my-4">
+                            <div class="mb-3">
+                                <label for="address" class="form-label">Street Address *</label>
+                                <input type="text" class="form-control" id="address" asp-for="Address" placeholder="123 Main Street" required>
                             </div>
-                            <div class="col-md-3 mb-3">
-                                <label for="zipCode" class="form-label">ZIP Code *</label>
-                                <input type="text" class="form-control" id="zipCode" name="ZipCode" 
-                                       asp-for="ZipCode" placeholder="12345" required>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="city" class="form-label">City *</label>
+                                    <input type="text" class="form-control" id="city" asp-for="City" required>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label for="state" class="form-label">State *</label>
+                                    <input type="text" class="form-control" id="state" asp-for="State" placeholder="CA" required>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label for="zipCode" class="form-label">ZIP Code *</label>
+                                    <input type="text" class="form-control" id="zipCode" asp-for="ZipCode" placeholder="12345" required>
+                                </div>
                             </div>
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="country" class="form-label">Country *</label>
-                            <select class="form-select" id="country" name="Country" asp-for="Country" required>
-                                <option value="">Select Country</option>
-                                <option value="US" selected>United States</option>
-                                <option value="CA">Canada</option>
-                                <option value="GB">United Kingdom</option>
-                                <option value="AU">Australia</option>
-                            </select>
-                        </div>
-
-                        <hr class="my-4">
-
-                        <h5 class="mb-3"><i class="fas fa-credit-card"></i> Payment Method</h5>
-                        
-                        <div class="alert alert-info">
-                            <i class="fas fa-info-circle"></i> <strong>Test Mode:</strong> Use card number <code>4242 4242 4242 4242</code> for testing.
-                        </div>
-
-                        <div class="mb-3">
-                            <label for="cardNumber" class="form-label">Card Number *</label>
-                            <input type="text" class="form-control" id="cardNumber"
-                                   placeholder="4242 4242 4242 4242" maxlength="19"
-                                   autocomplete="cc-number" required>
-                        </div>
-
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label for="expiryDate" class="form-label">Expiry Date *</label>
-                                <input type="text" class="form-control" id="expiryDate"
-                                       placeholder="MM/YY" maxlength="5"
-                                       autocomplete="cc-exp" required>
+                            <div class="mb-3">
+                                <label for="country" class="form-label">Country *</label>
+                                <select class="form-select" id="country" asp-for="Country" required>
+                                    <option value="">Select Country</option>
+                                    <option value="US">United States</option>
+                                    <option value="CA">Canada</option>
+                                    <option value="GB">United Kingdom</option>
+                                    <option value="AU">Australia</option>
+                                </select>
                             </div>
-                            <div class="col-md-6 mb-3">
-                                <label for="cvv" class="form-label">CVV *</label>
-                                <input type="text" class="form-control" id="cvv"
-                                       placeholder="123" maxlength="4"
-                                       autocomplete="cc-csc" required>
+
+                            <input type="hidden" asp-for="CartItemsJson" id="cartItemsJsonInput" />
+                            <div class="d-grid gap-2 mt-4">
+                                <button type="submit" class="btn btn-success btn-lg" id="placeOrderBtn">
+                                    <i class="fas fa-lock"></i> Continue to payment
+                                </button>
                             </div>
-                        </div>
-
-                        @* Hidden field: populated by JS from localStorage cart before form submit *@
-                        <input type="hidden" asp-for="CartItemsJson" id="cartItemsJsonInput" />
-
-                        <div class="d-grid gap-2 mt-4">
-                            <button type="submit" class="btn btn-success btn-lg" id="placeOrderBtn">
-                                <i class="fas fa-lock"></i> Place Order
-                            </button>
-                        </div>
+                        }
+                        else
+                        {
+                            <div class="alert alert-info">
+                                Test-mode checkout only. No tax is collected. Do not use live payment keys.
+                            </div>
+                            <div id="payment-element" class="mb-3"></div>
+                            <div id="payment-message" class="alert alert-danger d-none" role="alert"></div>
+                            <div class="d-grid gap-2 mt-4">
+                                <button type="button" class="btn btn-success btn-lg" id="confirmPaymentBtn">
+                                    <i class="fas fa-lock"></i> Pay $@Model.OrderTotal?.ToString("F2")
+                                </button>
+                            </div>
+                            <p class="small text-muted mt-3 mb-0">
+                                Order #@Model.OrderId will remain unpaid until Stripe confirms it. Do not fulfill it before its status is Paid.
+                            </p>
+                        }
                     </form>
                 </div>
             </div>
@@ -131,7 +105,7 @@
                     <h5 class="mb-0"><i class="fas fa-shopping-cart"></i> Order Summary</h5>
                 </div>
                 <div class="card-body">
-                    <div id="orderSummary">
+                    <div id="orderSummary" data-server-total="@Model.OrderTotal?.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)">
                         <p class="text-muted">Loading cart items...</p>
                     </div>
                 </div>
@@ -141,40 +115,50 @@
 </div>
 
 @section Scripts {
+    @if (!string.IsNullOrEmpty(Model.PaymentClientSecret))
+    {
+        <script src="https://js.stripe.com/v3/"></script>
+    }
     <script>
-        // Load cart from localStorage
         function loadCart() {
             const cart = JSON.parse(localStorage.getItem('cart') || '[]');
             const summaryDiv = document.getElementById('orderSummary');
-            
-            if (cart.length === 0) {
+            const paymentStage = document.getElementById('payment-element') !== null;
+
+            if (cart.length === 0 && !paymentStage) {
                 summaryDiv.innerHTML = '<p class="text-muted">Your cart is empty</p><a href="/products" class="btn btn-primary">Continue Shopping</a>';
-                document.getElementById('placeOrderBtn').disabled = true;
+                const placeOrderButton = document.getElementById('placeOrderBtn');
+                if (placeOrderButton) placeOrderButton.disabled = true;
                 return;
             }
 
             let total = 0;
             let html = '<div class="list-group list-group-flush mb-3">';
-            
             cart.forEach(item => {
-                const itemTotal = item.price * item.quantity;
+                const price = Number(item.price);
+                const quantity = Number(item.quantity);
+                if (!Number.isFinite(price) || !Number.isInteger(quantity) || quantity <= 0) return;
+                const itemTotal = price * quantity;
                 total += itemTotal;
+                const safeName = document.createElement('span');
+                safeName.textContent = String(item.name || '');
                 html += `
                     <div class="list-group-item d-flex justify-content-between align-items-center">
                         <div>
-                            <h6 class="mb-0">${item.name}</h6>
-                            <small class="text-muted">Qty: ${item.quantity}</small>
+                            <h6 class="mb-0">${safeName.innerHTML}</h6>
+                            <small class="text-muted">Qty: ${quantity}</small>
                         </div>
                         <span class="fw-bold">$${itemTotal.toFixed(2)}</span>
                     </div>
                 `;
             });
-            
             html += '</div>';
+            const serverTotal = Number(summaryDiv.dataset.serverTotal);
+            const displayedTotal = paymentStage && Number.isFinite(serverTotal) ? serverTotal : total;
             html += `
                 <div class="d-flex justify-content-between mb-2">
                     <span>Subtotal:</span>
-                    <span>$${total.toFixed(2)}</span>
+                    <span>$${displayedTotal.toFixed(2)}</span>
                 </div>
                 <div class="d-flex justify-content-between mb-2">
                     <span>Shipping:</span>
@@ -182,55 +166,63 @@
                 </div>
                 <div class="d-flex justify-content-between mb-2">
                     <span>Tax:</span>
-                    <span>$${(total * 0.1).toFixed(2)}</span>
+                    <span>$0.00</span>
                 </div>
                 <hr>
                 <div class="d-flex justify-content-between">
                     <strong>Total:</strong>
-                    <strong class="text-primary fs-4">$${(total * 1.1).toFixed(2)}</strong>
+                    <strong class="text-primary fs-4">$${displayedTotal.toFixed(2)}</strong>
                 </div>
+                ${paymentStage ? '' : '<p class="small text-muted mt-3 mb-0">Final amount is calculated by the server. No tax is collected in test mode.</p>'}
             `;
-            
             summaryDiv.innerHTML = html;
         }
 
-        // Format card number
-        document.getElementById('cardNumber')?.addEventListener('input', function(e) {
-            let value = e.target.value.replace(/\s/g, '');
-            let formattedValue = value.match(/.{1,4}/g)?.join(' ') || value;
-            e.target.value = formattedValue;
-        });
+        document.addEventListener('DOMContentLoaded', async function () {
+            loadCart();
+            const checkoutForm = document.getElementById('checkoutForm');
+            checkoutForm?.addEventListener('submit', function (event) {
+                const cart = JSON.parse(localStorage.getItem('cart') || '[]');
+                const items = cart.map(item => ({ productId: item.id, quantity: item.quantity }));
+                document.getElementById('cartItemsJsonInput').value = JSON.stringify(items);
+                if (items.length === 0) {
+                    event.preventDefault();
+                    alert('Your cart is empty. Please add items before checking out.');
+                    return;
+                }
 
-        // Format expiry date
-        document.getElementById('expiryDate')?.addEventListener('input', function(e) {
-            let value = e.target.value.replace(/\D/g, '');
-            if (value.length >= 2) {
-                value = value.substring(0, 2) + '/' + value.substring(2, 4);
-            }
-            e.target.value = value;
-        });
-
-        // Load cart on page load
-        document.addEventListener('DOMContentLoaded', loadCart);
-
-        // Handle form submission
-        document.getElementById('checkoutForm')?.addEventListener('submit', function(e) {
-            // Populate the hidden CartItemsJson field from localStorage before the form posts.
-            const cart = JSON.parse(localStorage.getItem('cart') || '[]');
-            const items = cart.map(function(item) {
-                return { productId: item.id, quantity: item.quantity };
+                const button = document.getElementById('placeOrderBtn');
+                button.disabled = true;
+                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating secure payment...';
             });
-            document.getElementById('cartItemsJsonInput').value = JSON.stringify(items);
 
-            if (items.length === 0) {
-                e.preventDefault();
-                alert('Your cart is empty. Please add items before checking out.');
-                return;
-            }
+            const paymentElement = document.getElementById('payment-element');
+            if (!paymentElement) return;
 
-            const placeOrderBtn = document.getElementById('placeOrderBtn');
-            placeOrderBtn.disabled = true;
-            placeOrderBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+            const stripe = Stripe(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.StripePublishableKey)));
+            const elements = stripe.elements({
+                clientSecret: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.PaymentClientSecret))
+            });
+            elements.create('payment').mount('#payment-element');
+
+            document.getElementById('confirmPaymentBtn').addEventListener('click', async function () {
+                const button = this;
+                const message = document.getElementById('payment-message');
+                button.disabled = true;
+                message.classList.add('d-none');
+                const result = await stripe.confirmPayment({
+                    elements,
+                    confirmParams: { return_url: `${window.location.origin}/Account/Orders` },
+                    redirect: 'if_required'
+                });
+                if (result.error) {
+                    message.textContent = result.error.message || 'Payment could not be completed. Check your payment details and try again.';
+                    message.classList.remove('d-none');
+                    button.disabled = false;
+                } else {
+                    window.location.assign('/Account/Orders');
+                }
+            });
         });
     </script>
 }

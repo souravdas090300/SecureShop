@@ -53,8 +53,31 @@ public class OrderEntityTests
     public void MarkAsPaid_ChangesStatusToPaid()
     {
         var order = Order.Create("user-1", TwoItems());
+        order.SetPaymentIntent("pi_123");
         order.MarkAsPaid();
         order.Status.Should().Be(OrderStatus.Paid);
+    }
+
+    [Fact]
+    public void MarkAsPaid_RepeatedCallIsIdempotent()
+    {
+        var order = Order.Create("user-1", TwoItems());
+        order.SetPaymentIntent("pi_123");
+        order.MarkAsPaid();
+
+        order.MarkAsPaid();
+
+        order.Status.Should().Be(OrderStatus.Paid);
+    }
+
+    [Fact]
+    public void MarkAsPaid_WithoutPaymentIntent_ThrowsDomainException()
+    {
+        var order = Order.Create("user-1", TwoItems());
+
+        var act = () => order.MarkAsPaid();
+
+        act.Should().Throw<DomainException>();
     }
 
     // ─── Cancel ───────────────────────────────────────────────────────────────
@@ -71,6 +94,8 @@ public class OrderEntityTests
     public void Cancel_FromShippedStatus_ThrowsDomainException()
     {
         var order = Order.Create("user-1", TwoItems());
+        order.SetPaymentIntent("pi_test");
+        order.MarkAsPaid();
         order.SetStatus(OrderStatus.Shipped);
 
         var act = () => order.Cancel();
@@ -81,25 +106,42 @@ public class OrderEntityTests
     public void Cancel_FromDeliveredStatus_ThrowsDomainException()
     {
         var order = Order.Create("user-1", TwoItems());
+        order.SetPaymentIntent("pi_test");
+        order.MarkAsPaid();
+        order.SetStatus(OrderStatus.Shipped);
         order.SetStatus(OrderStatus.Delivered);
 
         var act = () => order.Cancel();
         act.Should().Throw<DomainException>().WithMessage("Cannot cancel a shipped or delivered order");
     }
 
-    // ─── SetStatus ────────────────────────────────────────────────────────────
-
-    [Theory]
-    [InlineData(OrderStatus.Pending)]
-    [InlineData(OrderStatus.Paid)]
-    [InlineData(OrderStatus.Shipped)]
-    [InlineData(OrderStatus.Delivered)]
-    [InlineData(OrderStatus.Cancelled)]
-    public void SetStatus_AllowsAnyStatus(OrderStatus status)
+    [Fact]
+    public void Cancel_FromPaymentProcessingStatus_RequiresPaymentCancellation()
     {
         var order = Order.Create("user-1", TwoItems());
-        order.SetStatus(status);
-        order.Status.Should().Be(status);
+        order.SetPaymentIntent("pi_test");
+
+        var act = () => order.Cancel();
+
+        act.Should().Throw<DomainException>().WithMessage("*verified payment cancellation or refund*");
+    }
+
+    // ─── SetStatus ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void SetStatus_CannotMarkOrderPaid()
+    {
+        var order = Order.Create("user-1", TwoItems());
+        var act = () => order.SetStatus(OrderStatus.Paid);
+        act.Should().Throw<DomainException>().WithMessage("*verified payment*");
+    }
+
+    [Fact]
+    public void SetStatus_CannotShipUnpaidOrder()
+    {
+        var order = Order.Create("user-1", TwoItems());
+        var act = () => order.SetStatus(OrderStatus.Shipped);
+        act.Should().Throw<DomainException>().WithMessage("*paid orders*");
     }
 }
 
@@ -115,5 +157,17 @@ public class OrderItemTests
         item.ProductId.Should().Be(productId);
         item.Quantity.Should().Be(3);
         item.UnitPrice.Should().Be(15.50m);
+    }
+
+    [Theory]
+    [InlineData(0, 10)]
+    [InlineData(-1, 10)]
+    [InlineData(1, 0)]
+    [InlineData(1, -1)]
+    public void Create_InvalidQuantityOrPrice_ThrowsDomainException(int quantity, decimal unitPrice)
+    {
+        var act = () => OrderItem.Create(Guid.NewGuid(), quantity, unitPrice);
+
+        act.Should().Throw<DomainException>();
     }
 }

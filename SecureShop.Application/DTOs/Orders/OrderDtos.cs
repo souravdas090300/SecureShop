@@ -16,8 +16,8 @@ public record UpdateOrderStatusDto(int Status);
 
 /// <summary>
 /// Full read-model for an order, returned by GET and POST order endpoints.
-/// Includes all line items, the Stripe client secret (when payment is pending),
-/// and the order's current lifecycle status.
+/// Includes all line items and the order's current lifecycle status. The
+/// PaymentIntent client secret is populated only in the order-creation response.
 /// </summary>
 public record OrderResponseDto(
     Guid Id,
@@ -27,4 +27,5 @@ public record OrderResponseDto(
     OrderStatus Status,
     decimal TotalAmount,
     string? StripePaymentIntentId,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    string? PaymentClientSecret = null);

@@ -68,9 +68,12 @@ public class Order
     /// Associates a Stripe payment intent with this order and advances status
     /// to <see cref="OrderStatus.PaymentProcessing"/>.
     /// </summary>
-    /// <param name="paymentIntentId">The client secret returned by Stripe.</param>
+    /// <param name="paymentIntentId">The PaymentIntent ID returned by Stripe.</param>
     public void SetPaymentIntent(string paymentIntentId)
     {
+        if (string.IsNullOrWhiteSpace(paymentIntentId))
+            throw new DomainException("Stripe payment intent ID is required");
+
         StripePaymentIntentId = paymentIntentId;
         Status = OrderStatus.PaymentProcessing;
         UpdatedAt = DateTime.UtcNow;
@@ -79,6 +82,12 @@ public class Order
     /// <summary>Marks the order as <see cref="OrderStatus.Paid"/> after payment confirmation.</summary>
     public void MarkAsPaid()
     {
+        if (Status == OrderStatus.Paid)
+            return;
+
+        if (Status != OrderStatus.PaymentProcessing)
+            throw new DomainException("Only an order awaiting payment can be marked as paid");
+
         Status = OrderStatus.Paid;
         UpdatedAt = DateTime.UtcNow;
     }
@@ -87,23 +96,41 @@ public class Order
     /// Cancels the order. Shipment or delivery already in progress cannot be cancelled.
     /// </summary>
     /// <exception cref="DomainException">
-    /// Thrown when the order is already shipped or delivered.
+    /// Thrown when payment requires cancellation/refund or the order is already shipped/delivered.
     /// </exception>
     public void Cancel()
     {
         if (Status == OrderStatus.Shipped || Status == OrderStatus.Delivered)
             throw new DomainException("Cannot cancel a shipped or delivered order");
+        if (Status is OrderStatus.PaymentProcessing or OrderStatus.Paid)
+            throw new DomainException("Orders with a payment intent require verified payment cancellation or refund");
         Status = OrderStatus.Cancelled;
         UpdatedAt = DateTime.UtcNow;
     }
 
     /// <summary>
-    /// Directly sets the order status to an arbitrary <see cref="OrderStatus"/> value.
-    /// Used by admin operations that need to force a specific state transition.
+    /// Advances an order through an allowed fulfillment status transition.
+    /// Payment status can only be changed by verified payment confirmation.
     /// </summary>
     /// <param name="status">The target status to apply.</param>
     public void SetStatus(OrderStatus status)
     {
+        if (!Enum.IsDefined(typeof(OrderStatus), status))
+            throw new DomainException("Invalid order status");
+        if (status == OrderStatus.Paid)
+            throw new DomainException("Only a verified payment can mark an order as paid");
+        if (status == OrderStatus.Shipped && Status != OrderStatus.Paid)
+            throw new DomainException("Only paid orders can be shipped");
+        if (status == OrderStatus.Delivered && Status != OrderStatus.Shipped)
+            throw new DomainException("Only shipped orders can be delivered");
+        if (status == OrderStatus.Cancelled &&
+            (Status != OrderStatus.Pending || StripePaymentIntentId is not null))
+        {
+            throw new DomainException("Orders with a payment intent require verified payment cancellation");
+        }
+        if (status is OrderStatus.Pending or OrderStatus.PaymentProcessing)
+            throw new DomainException("Order status cannot be reset");
+
         Status = status;
         UpdatedAt = DateTime.UtcNow;
     }
