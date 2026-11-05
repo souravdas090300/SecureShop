@@ -134,7 +134,7 @@ SecureShop.sln
 ### Customer storefront
 - Product catalogue with category filtering and search (paginated, Redis-cached)
 - Shopping cart (session-based, client-side)
-- Test-mode Stripe Payment Element checkout; only a valid signed webhook matching the PaymentIntent, order amount, and currency marks an order paid
+- Test-mode Stripe Payment Element checkout; signed webhook events drive the full payment lifecycle (see below)
 - Server-calculated order totals; no tax is currently collected
 - Account registration and login (email/password + Google OAuth)
 - Password reset via OTP email
@@ -237,7 +237,7 @@ All order endpoints require a valid JWT (`Authorization: Bearer <token>`).
 | `GET` | `/api/orders/{id}` | Customer JWT or Admin | Get order by ID |
 | `GET` | `/api/orders` | Admin | Get all orders |
 | `PUT` | `/api/orders/{id}/status` | Admin | Advance an order through allowed fulfillment statuses |
-| `POST` | `/api/webhooks/stripe` | Stripe signature | Verify Stripe events; only a matching signed success event marks an order paid |
+| `POST` | `/api/webhooks/stripe` | Stripe signature | Idempotently process `payment_intent.succeeded` / `.payment_failed` / `.canceled` events |
 
 Create order request:
 ```json
@@ -249,6 +249,19 @@ Create order request:
 ```
 
 For a successful `POST /api/orders`, `stripePaymentIntentId` is the Stripe PaymentIntent ID. `paymentClientSecret` is returned for the checkout page to confirm the payment with Stripe.js; it is not stored as the order's payment ID. The order remains unpaid until the signed webhook confirms it. Stripe.net 50.4.1 expects webhook API version `2026-02-25.clover`.
+
+### Payment lifecycle
+
+Order stock is reserved atomically at checkout and released exactly once when payment can no longer complete:
+
+- **`payment_intent.succeeded`** — verified against the order's PaymentIntent ID, amount, and currency, then `PaymentProcessing → Paid` via a single conditional `UPDATE`. Duplicate deliveries are no-ops.
+- **`payment_intent.payment_failed`** — records `LastPaymentFailureCode`/`LastPaymentFailureAt` on the order. The status stays `PaymentProcessing` and stock stays reserved, because the PaymentIntent remains retryable (`requires_payment_method`).
+- **`payment_intent.canceled`** — atomically transitions `PaymentProcessing → Cancelled` and restores every reserved line. A `Paid` order is never cancelled.
+- **Webhook idempotency** — every processed event ID is recorded in `ProcessedStripeEvents` inside the same transaction as its effects (`INSERT ... ON CONFLICT DO NOTHING`). Duplicate or parallel deliveries return 200 without repeating side effects; transient errors return 5xx so Stripe retries.
+- **Abandoned checkouts** — `OrderAbandonmentService` runs every `Orders__AbandonmentIntervalMinutes` (default 5) and cancels `PaymentProcessing` orders older than `Orders__AbandonAfterMinutes` (default 30). It asks Stripe for the intent state first: already-succeeded intents are left for the webhook to mark paid; failed lookups are retried next sweep.
+- **Late payment** — a `succeeded` event for an already-`Cancelled` order is not marked paid; the payment is refunded (`RefundPaymentIntentAsync`, idempotency key `secure-shop-refund-{orderId}`) and `StripeRefundId` is stored on the order. A Warning is logged for manual review.
+
+In Stripe, register the webhook endpoint `https://<your-domain>/api/webhooks/stripe` for `payment_intent.succeeded`, `payment_intent.payment_failed`, and `payment_intent.canceled`, and set `Stripe__WebhookSecret` to that endpoint's signing secret.
 
 ---
 
@@ -365,6 +378,8 @@ Set these in the Railway service dashboard (use `__` as the section separator):
 | `Stripe__SecretKey` | For test payments | `sk_test_...` only; current code rejects live secret keys |
 | `Stripe__PublishableKey` | For test checkout | `pk_test_...` only |
 | `Stripe__WebhookSecret` | For payment confirmation | Test webhook signing secret (`whsec_...`) |
+| `Orders__AbandonAfterMinutes` | No | Cancel unpaid orders older than this (default `30`) |
+| `Orders__AbandonmentIntervalMinutes` | No | Abandonment sweep interval (default `5`) |
 | `GoogleAuth__ClientId` | No | Google OAuth 2.0 client ID — omit to disable Google Sign-In |
 | `Email__SmtpHost` | No | SMTP host (e.g. `smtp.gmail.com`) |
 | `Email__SmtpPort` | No | SMTP port; current code's TLS handling must be corrected and tested before relying on email |
@@ -380,14 +395,14 @@ Set these in the Railway service dashboard (use `__` as the section separator):
 ## Known limitations and pre-deployment blockers
 
 - **Payments are test-mode only.** Checkout uses Stripe Payment Element. A signed `payment_intent.succeeded` event must match the order's PaymentIntent ID, amount, and currency before the order becomes paid. No live payments are authorized.
-- **Payment lifecycle is incomplete.** Refunds, abandoned-checkout cancellation and stock release, and complete failed-payment handling are not implemented or verified. Checkout currently collects no tax; a production tax policy remains to be decided and implemented.
+- **Payment lifecycle is implemented but not live-verified.** Test-mode only: signed webhook events drive paid/cancelled/failed transitions, abandoned checkouts release stock via a background sweep, duplicate deliveries are idempotent, and late payments are refunded. Live Stripe behavior, refunds in production, and a tax policy remain unverified/open. Checkout currently collects no tax; a production tax policy remains to be decided and implemented.
 - **Checkout details are not persisted.** Contact and shipping fields are shown in the front end but are not included in the order request or saved with the order.
 - **Email delivery needs a TLS fix and provider testing** before password-reset email can be relied on.
 - **`/health` is liveness-only** and does not check PostgreSQL or migration readiness.
 - **Runtime support needs attention.** This project targets .NET 8; the blocker review records its support end date as November 10, 2026. Upgrade and validate against a supported runtime.
 - **External and deployment validation remains open.** The automated suite does not establish live Stripe behavior, provider integrations, production database readiness, or an HTTPS deployment smoke test.
 
-The latest Release build passed with `/warnaserror` and 0 warnings/errors; **360 tests passed** (354 unit, 6 HTTP integration). Stripe signature and order-confirmation tests are local unit tests, not a live Stripe transaction. Production approval requires resolving the items above and validating the target environment; see [docs/pre-deployment-blockers.md](./docs/pre-deployment-blockers.md).
+The latest Release build passed with `/warnaserror` and 0 warnings/errors; **376 tests passed** (362 unit, 14 integration). Integration tests run against real PostgreSQL, including payment-lifecycle scenarios (duplicate/parallel webhook deliveries, failed payments, paid-order cancellation, late-payment refunds, and the abandonment sweep). Stripe signature and order-confirmation tests are local unit tests, not a live Stripe transaction. Production approval requires resolving the items above and validating the target environment; see [docs/pre-deployment-blockers.md](./docs/pre-deployment-blockers.md).
 
 ---
 
@@ -417,12 +432,12 @@ The latest Release build passed with `/warnaserror` and 0 warnings/errors; **360
 dotnet test
 ```
 
-**360 test cases pass** — 354 unit tests and 6 HTTP integration tests. The integration tests verify `/health`, production authentication-cookie settings, production Swagger unavailability, Stripe CSP directives, invalid product pagination, and that authentication debug pages are unavailable in Production. The Release build passes with `/warnaserror`, and the current transitive NuGet vulnerability scan reports no vulnerable packages.
+**376 test cases pass** — 362 unit tests and 14 integration tests. The integration tests verify `/health`, production authentication-cookie settings, production Swagger unavailability, Stripe CSP directives, invalid product pagination, authentication debug pages in Production, atomic stock reservation under concurrency, and the Stripe payment lifecycle (webhook idempotency, failed/cancelled/succeeded transitions, late-payment refunds, abandonment sweep) against real PostgreSQL. The Release build passes with `/warnaserror`, and the current transitive NuGet vulnerability scan reports no vulnerable packages.
 
 | Project | Count | Coverage areas |
 |---------|-------|----------------|
-| `SecureShop.UnitTests` | 354 | Domain entities, account lockout, pagination bounds, Stripe payment/webhook behavior, controllers, middleware, antiforgery handling, validators, and Razor Page models |
-| `SecureShop.IntegrationTests` | 4 | `/health`, production authentication-cookie settings, Swagger unavailability, CSP directives, and pagination response, using `WebApplicationFactory` |
+| `SecureShop.UnitTests` | 362 | Domain entities, account lockout, pagination bounds, Stripe payment/webhook behavior including lifecycle branches, controllers, middleware, antiforgery handling, validators, and Razor Page models |
+| `SecureShop.IntegrationTests` | 14 | `/health`, production authentication-cookie settings, Swagger unavailability, CSP directives, pagination response, stock-reservation concurrency, and Stripe payment lifecycle scenarios against real PostgreSQL |
 
 ---
 

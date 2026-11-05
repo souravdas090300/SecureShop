@@ -17,6 +17,8 @@ public class OrderService
     private readonly IProductRepository _productRepo;
     private readonly IPaymentService _paymentService;
     private readonly ICacheService _cache;
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly IStripeEventRepository _stripeEventRepo;
     private readonly ILogger<OrderService> _logger;
 
     // Matches the key prefix used by ProductService for individual product DTOs.
@@ -31,12 +33,16 @@ public class OrderService
         IProductRepository productRepo,
         IPaymentService paymentService,
         ICacheService cache,
+        IUnitOfWork unitOfWork,
+        IStripeEventRepository stripeEventRepo,
         ILogger<OrderService> logger)
     {
         _orderRepo = orderRepo;
         _productRepo = productRepo;
         _paymentService = paymentService;
         _cache = cache;
+        _unitOfWork = unitOfWork;
+        _stripeEventRepo = stripeEventRepo;
         _logger = logger;
     }
 
@@ -160,6 +166,8 @@ public class OrderService
     /// <summary>
     /// Marks an order paid only when a verified Stripe event matches its
     /// persisted PaymentIntent ID, expected amount, and currency.
+    /// The status change is an atomic conditional transition so concurrent
+    /// deliveries cannot double-apply it.
     /// </summary>
     public async Task<bool> ConfirmPaymentAsync(
         string paymentIntentId,
@@ -180,12 +188,179 @@ public class OrderService
         if (order.Status == Domain.Enums.OrderStatus.Paid)
             return true;
 
-        if (order.Status != Domain.Enums.OrderStatus.PaymentProcessing)
+        if (order.Status == Domain.Enums.OrderStatus.PaymentProcessing)
+        {
+            var transitioned = await _orderRepo.TryTransitionStatusAsync(
+                order.Id,
+                Domain.Enums.OrderStatus.PaymentProcessing,
+                Domain.Enums.OrderStatus.Paid,
+                cancellationToken);
+            if (transitioned)
+                return true;
+
+            // Lost the race — read the committed status fresh (the tracked
+            // entity is stale) to see which transition won.
+            var current = await _orderRepo.GetStatusByPaymentIntentIdAsync(paymentIntentId, cancellationToken);
+            if (current == Domain.Enums.OrderStatus.Paid)
+                return true;
+            if (current == Domain.Enums.OrderStatus.Cancelled && order is not null)
+            {
+                await RefundLatePaymentAsync(order, cancellationToken);
+                return false;
+            }
+            return false;
+        }
+
+        if (order.Status == Domain.Enums.OrderStatus.Cancelled)
+        {
+            // Money arrived for an order we already released — refund it.
+            await RefundLatePaymentAsync(order, cancellationToken);
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Processes a verified Stripe webhook event exactly once. The event-id
+    /// insert and all of its effects commit in a single transaction; a
+    /// duplicate delivery returns without doing anything, and transient
+    /// failures propagate so Stripe retries with a 5xx.
+    /// </summary>
+    /// <param name="eventId">Stripe event ID (evt_...) used for deduplication.</param>
+    /// <param name="eventType">Stripe event type.</param>
+    /// <param name="paymentIntentId">The PaymentIntent the event refers to.</param>
+    /// <param name="amount">Expected amount in minor units (from the event).</param>
+    /// <param name="amountReceived">Amount actually received, in minor units.</param>
+    /// <param name="currency">Currency code from the event.</param>
+    /// <param name="failureCode">Stripe failure code for payment_failed events.</param>
+    public async Task ProcessStripeEventAsync(
+        string eventId,
+        string eventType,
+        string paymentIntentId,
+        long amount,
+        long amountReceived,
+        string currency,
+        string? failureCode,
+        CancellationToken cancellationToken = default)
+    {
+        await _unitOfWork.ExecuteInTransactionAsync(async () =>
+        {
+            // Claim the event first — ON CONFLICT DO NOTHING means a duplicate
+            // or parallel delivery sees 0 rows inserted and does no work.
+            if (!await _stripeEventRepo.TryRecordProcessedEventAsync(eventId, eventType, cancellationToken))
+                return false;
+
+            switch (eventType)
+            {
+                case "payment_intent.succeeded":
+                    await ConfirmPaymentAsync(paymentIntentId, amount, amountReceived, currency, cancellationToken);
+                    break;
+                case "payment_intent.payment_failed":
+                    await RecordPaymentFailureAsync(paymentIntentId, failureCode, cancellationToken);
+                    break;
+                case "payment_intent.canceled":
+                    await CancelUnpaidOrderCoreAsync(paymentIntentId, cancellationToken);
+                    break;
+            }
+
+            return true;
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Cancels an order still awaiting payment and restores its reserved stock.
+    /// Used by the abandonment job after Stripe confirms the intent is cancelled.
+    /// Safe to call concurrently — the status transition is atomic, so stock is
+    /// restored exactly once.
+    /// </summary>
+    /// <returns><c>true</c> when this call performed the cancellation.</returns>
+    public async Task<bool> CancelUnpaidOrderAsync(string paymentIntentId, CancellationToken cancellationToken = default)
+    {
+        return await _unitOfWork.ExecuteInTransactionAsync(
+            () => CancelUnpaidOrderCoreAsync(paymentIntentId, cancellationToken),
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// Returns orders stuck in PaymentProcessing since before the cutoff —
+    /// candidates for the abandonment sweep.
+    /// </summary>
+    public async Task<IEnumerable<OrderResponseDto>> GetAbandonedOrdersAsync(
+        DateTime createdBefore, int take, CancellationToken cancellationToken = default)
+    {
+        var orders = await _orderRepo.GetStalePaymentProcessingOrdersAsync(createdBefore, take, cancellationToken);
+        return orders
+            .Where(o => !string.IsNullOrEmpty(o.StripePaymentIntentId))
+            .Select(o => new OrderResponseDto(
+                o.Id, o.UserId, o.User?.Email ?? string.Empty,
+                o.Items.Select(i => new OrderItemResponseDto(
+                    i.ProductId, i.Product?.Name ?? string.Empty, i.Quantity, i.UnitPrice)).ToList(),
+                o.Status, o.TotalAmount, o.StripePaymentIntentId, o.CreatedAt, null))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Records a failed payment attempt on the order. The stock reservation is
+    /// kept because the PaymentIntent stays retryable after payment_failed.
+    /// </summary>
+    private async Task RecordPaymentFailureAsync(string paymentIntentId, string? failureCode, CancellationToken cancellationToken)
+    {
+        var order = await _orderRepo.GetByPaymentIntentIdAsync(paymentIntentId, cancellationToken);
+        if (order is null || order.Status != Domain.Enums.OrderStatus.PaymentProcessing)
+            return;
+
+        order.RecordPaymentFailure(failureCode, DateTime.UtcNow);
+        await _orderRepo.UpdateAsync(order, cancellationToken);
+    }
+
+    /// <summary>
+    /// Transitions PaymentProcessing → Cancelled atomically and restores every
+    /// reserved line, but only when this call wins the transition. Paid and
+    /// already-Cancelled orders are left untouched. Must run inside a
+    /// transaction (the webhook wrapper or <see cref="CancelUnpaidOrderAsync"/>).
+    /// </summary>
+    private async Task<bool> CancelUnpaidOrderCoreAsync(string paymentIntentId, CancellationToken cancellationToken)
+    {
+        var order = await _orderRepo.GetByPaymentIntentIdAsync(paymentIntentId, cancellationToken);
+        if (order is null || order.Status != Domain.Enums.OrderStatus.PaymentProcessing)
             return false;
 
-        order.MarkAsPaid();
-        await _orderRepo.UpdateAsync(order, cancellationToken);
+        var transitioned = await _orderRepo.TryTransitionStatusAsync(
+            order.Id,
+            Domain.Enums.OrderStatus.PaymentProcessing,
+            Domain.Enums.OrderStatus.Cancelled,
+            cancellationToken);
+        if (!transitioned)
+            return false; // a concurrent event already moved the order (e.g. to Paid)
+
+        foreach (var item in order.Items)
+            await _productRepo.RestoreStockAsync(item.ProductId, item.Quantity, cancellationToken);
+        foreach (var item in order.Items)
+            await EvictProductCacheAsync(item.ProductId);
+
+        _logger.LogInformation("Order {OrderId} cancelled after payment intent {PaymentIntentId} was cancelled; stock restored", order.Id, paymentIntentId);
         return true;
+    }
+
+    /// <summary>
+    /// Refunds a payment that succeeded after its order was already cancelled,
+    /// and stores the Stripe refund ID on the order. Idempotent per order via
+    /// the Stripe idempotency key and the StripeRefundId guard.
+    /// </summary>
+    private async Task RefundLatePaymentAsync(Order order, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(order.StripePaymentIntentId) || order.StripeRefundId is not null)
+            return;
+
+        var refundId = await _paymentService.RefundPaymentIntentAsync(
+            order.StripePaymentIntentId,
+            $"secure-shop-refund-{order.Id}");
+        order.SetRefundId(refundId);
+        await _orderRepo.UpdateAsync(order, cancellationToken);
+
+        _logger.LogWarning(
+            "Late payment on cancelled order {OrderId}: payment intent {PaymentIntentId} succeeded after cancellation; refund {RefundId} issued",
+            order.Id, order.StripePaymentIntentId, refundId);
     }
 
     /// <summary>

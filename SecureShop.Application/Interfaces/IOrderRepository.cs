@@ -1,4 +1,5 @@
 using SecureShop.Domain.Entities;
+using SecureShop.Domain.Enums;
 
 namespace SecureShop.Application.Interfaces;
 
@@ -13,6 +14,28 @@ public interface IOrderRepository
 
     /// <summary>Finds an order by its Stripe PaymentIntent ID.</summary>
     Task<Order?> GetByPaymentIntentIdAsync(string paymentIntentId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns the current status of the order for a PaymentIntent, read
+    /// untracked so it reflects the latest committed value even when the
+    /// caller holds a stale tracked entity.
+    /// </summary>
+    Task<OrderStatus?> GetStatusByPaymentIntentIdAsync(string paymentIntentId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Atomically transitions an order from <paramref name="from"/> to
+    /// <paramref name="to"/> in a single conditional UPDATE. Returns
+    /// <c>true</c> only when exactly one row changed — concurrent transitions
+    /// lose safely instead of overwriting each other.
+    /// </summary>
+    Task<bool> TryTransitionStatusAsync(Guid orderId, OrderStatus from, OrderStatus to, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns orders stuck in <see cref="OrderStatus.PaymentProcessing"/>
+    /// created before <paramref name="createdBefore"/>, oldest first.
+    /// Used by the abandonment job.
+    /// </summary>
+    Task<IEnumerable<Order>> GetStalePaymentProcessingOrdersAsync(DateTime createdBefore, int take, CancellationToken cancellationToken = default);
 
     /// <summary>Returns all orders belonging to the specified user, newest first.</summary>
     Task<IEnumerable<Order>> GetByUserIdAsync(string userId);

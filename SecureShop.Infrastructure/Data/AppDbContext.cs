@@ -26,6 +26,9 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>, IDataProtectionK
     /// <summary>Individual line items within orders.</summary>
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
 
+    /// <summary>Stripe webhook events already processed (idempotency ledger).</summary>
+    public DbSet<ProcessedStripeEvent> ProcessedStripeEvents => Set<ProcessedStripeEvent>();
+
     /// <summary>
     /// Configures entity mappings, precision settings, relationships, and global query filters.
     /// A global <c>IsActive</c> filter on <see cref="Product"/> means soft-deleted products
@@ -60,6 +63,13 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>, IDataProtectionK
                 .HasForeignKey(oi => oi.ProductId)
                 .IsRequired(false)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<ProcessedStripeEvent>(e =>
+        {
+            e.HasKey(p => p.EventId);
+            e.Property(p => p.EventId).HasMaxLength(100).IsRequired();
+            e.Property(p => p.Type).HasMaxLength(100).IsRequired();
         });
     }
 }

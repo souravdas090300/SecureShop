@@ -33,7 +33,7 @@ public class PaymentService : IPaymentService
             }
         };
 
-        var service = CreateService();
+        var service = new PaymentIntentService(CreateClient());
         var intent = await service.CreateAsync(options, new RequestOptions
         {
             IdempotencyKey = $"secure-shop-order-{orderId}"
@@ -45,10 +45,36 @@ public class PaymentService : IPaymentService
     /// <inheritdoc />
     public async Task CancelPaymentIntentAsync(string paymentIntentId)
     {
-        await CreateService().CancelAsync(paymentIntentId);
+        await new PaymentIntentService(CreateClient()).CancelAsync(paymentIntentId);
     }
 
-    private PaymentIntentService CreateService()
+    /// <inheritdoc />
+    public async Task<PaymentIntentState> GetPaymentIntentStatusAsync(string paymentIntentId)
+    {
+        var intent = await new PaymentIntentService(CreateClient()).GetAsync(paymentIntentId);
+        return intent.Status switch
+        {
+            "requires_payment_method" => PaymentIntentState.RequiresPaymentMethod,
+            "requires_confirmation" => PaymentIntentState.RequiresConfirmation,
+            "requires_action" => PaymentIntentState.RequiresAction,
+            "processing" => PaymentIntentState.Processing,
+            "requires_capture" => PaymentIntentState.RequiresCapture,
+            "succeeded" => PaymentIntentState.Succeeded,
+            "canceled" => PaymentIntentState.Canceled,
+            _ => PaymentIntentState.Unknown
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<string> RefundPaymentIntentAsync(string paymentIntentId, string idempotencyKey)
+    {
+        var refund = await new RefundService(CreateClient()).CreateAsync(
+            new RefundCreateOptions { PaymentIntent = paymentIntentId },
+            new RequestOptions { IdempotencyKey = idempotencyKey });
+        return refund.Id;
+    }
+
+    private StripeClient CreateClient()
     {
         var secretKey = _configuration["Stripe:SecretKey"];
         if (string.IsNullOrWhiteSpace(secretKey) ||
@@ -58,6 +84,6 @@ public class PaymentService : IPaymentService
                 "Stripe test-mode payments require a Stripe:SecretKey beginning with sk_test_.");
         }
 
-        return new PaymentIntentService(new StripeClient(secretKey));
+        return new StripeClient(secretKey);
     }
 }

@@ -31,6 +31,15 @@ public class Order
     /// <summary>Stripe payment intent ID, set when payment processing begins.</summary>
     public string? StripePaymentIntentId { get; private set; }
 
+    /// <summary>Stripe refund ID, set when a late payment on a cancelled order is refunded.</summary>
+    public string? StripeRefundId { get; private set; }
+
+    /// <summary>Stripe failure code from the most recent payment_intent.payment_failed event.</summary>
+    public string? LastPaymentFailureCode { get; private set; }
+
+    /// <summary>UTC timestamp of the most recent payment failure, if any.</summary>
+    public DateTime? LastPaymentFailureAt { get; private set; }
+
     /// <summary>UTC timestamp when the order was first created.</summary>
     public DateTime CreatedAt { get; private set; }
 
@@ -76,6 +85,30 @@ public class Order
 
         StripePaymentIntentId = paymentIntentId;
         Status = OrderStatus.PaymentProcessing;
+        UpdatedAt = DateTime.UtcNow;
+    }
+
+    /// <summary>
+    /// Records a failed payment attempt. The order keeps its stock reservation
+    /// and stays in <see cref="OrderStatus.PaymentProcessing"/> because the
+    /// PaymentIntent remains retryable.
+    /// </summary>
+    /// <param name="code">Stripe failure code (e.g. card_declined), or null.</param>
+    /// <param name="failedAt">UTC timestamp of the failure.</param>
+    public void RecordPaymentFailure(string? code, DateTime failedAt)
+    {
+        LastPaymentFailureCode = string.IsNullOrWhiteSpace(code) ? "unknown" : code;
+        LastPaymentFailureAt = failedAt;
+        UpdatedAt = failedAt;
+    }
+
+    /// <summary>Stores the Stripe refund ID issued for a late payment on a cancelled order.</summary>
+    /// <param name="refundId">The refund identifier returned by Stripe.</param>
+    public void SetRefundId(string refundId)
+    {
+        if (string.IsNullOrWhiteSpace(refundId))
+            throw new DomainException("Stripe refund ID is required");
+        StripeRefundId = refundId;
         UpdatedAt = DateTime.UtcNow;
     }
 

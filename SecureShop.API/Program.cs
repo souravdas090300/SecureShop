@@ -50,6 +50,10 @@ catch (Exception ex)
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
+// Abandoned-checkout sweeper: cancels stale PaymentProcessing orders and
+// restores their stock (interval/age configurable via Orders:* settings).
+builder.Services.AddHostedService<SecureShop.API.Services.OrderAbandonmentService>();
+
 // ── HttpClient for Razor Pages to call API ───────────────────────────────────
 builder.Services.AddHttpClient();
 

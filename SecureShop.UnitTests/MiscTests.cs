@@ -369,6 +369,27 @@ public class OrderResponseDtoTests
             await act.Should().ThrowAsync<InvalidOperationException>()
                 .WithMessage("*test-mode*");
         }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("sk_live_not_allowed")]
+        public async Task PaymentLifecycleMethods_RequireTestModeSecretKey(string? secretKey)
+        {
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Stripe:SecretKey"] = secretKey
+                })
+                .Build();
+            var service = new PaymentService(configuration);
+
+            Func<Task> statusAct = () => service.GetPaymentIntentStatusAsync("pi_x");
+            await statusAct.Should().ThrowAsync<InvalidOperationException>().WithMessage("*test-mode*");
+            Func<Task<string>> refundAct = () => service.RefundPaymentIntentAsync("pi_x", "key-1");
+            await refundAct.Should().ThrowAsync<InvalidOperationException>().WithMessage("*test-mode*");
+            Func<Task> cancelAct = () => service.CancelPaymentIntentAsync("pi_x");
+            await cancelAct.Should().ThrowAsync<InvalidOperationException>().WithMessage("*test-mode*");
+        }
     }
 }
 

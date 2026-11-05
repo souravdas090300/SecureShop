@@ -18,6 +18,17 @@ public interface IPaymentService
 
     /// <summary>Cancels a test-mode PaymentIntent that could not be attached to a saved order.</summary>
     Task CancelPaymentIntentAsync(string paymentIntentId);
+
+    /// <summary>Retrieves the current state of a PaymentIntent from Stripe.</summary>
+    /// <param name="paymentIntentId">The PaymentIntent ID (pi_...).</param>
+    Task<PaymentIntentState> GetPaymentIntentStatusAsync(string paymentIntentId);
+
+    /// <summary>
+    /// Refunds a succeeded PaymentIntent. <paramref name="idempotencyKey"/>
+    /// deduplicates retries (e.g. one key per order).
+    /// </summary>
+    /// <returns>The Stripe refund ID (re_...).</returns>
+    Task<string> RefundPaymentIntentAsync(string paymentIntentId, string idempotencyKey);
 }
 
 /// <summary>Identifiers returned when a Stripe PaymentIntent is created.</summary>

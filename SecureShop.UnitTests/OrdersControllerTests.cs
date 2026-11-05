@@ -18,7 +18,9 @@ namespace SecureShop.UnitTests;
 public class OrdersControllerTests
 {
     private static OrderService MakeSvc(Mock<IOrderRepository> orderRepo, Mock<IProductRepository> productRepo, Mock<IPaymentService> payment)
-        => new(orderRepo.Object, productRepo.Object, payment.Object, new NullCacheService(), NullLogger<OrderService>.Instance);
+        => new(orderRepo.Object, productRepo.Object, payment.Object, new NullCacheService(),
+            new Mock<IUnitOfWork>().Object, new Mock<IStripeEventRepository>().Object,
+            NullLogger<OrderService>.Instance);
 
     private static OrdersController MakeController(OrderService svc, string userId = "user-1")
     {

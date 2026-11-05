@@ -66,28 +66,33 @@ public sealed class StripeWebhookController : ControllerBase
             return BadRequest();
         }
 
-        if (stripeEvent.Type != "payment_intent.succeeded")
+        // Only payment-intent lifecycle events carry an order effect. Other
+        // event types are acknowledged without processing.
+        if (stripeEvent.Type is not ("payment_intent.succeeded"
+            or "payment_intent.payment_failed"
+            or "payment_intent.canceled"))
+        {
             return Ok();
+        }
 
         if (stripeEvent.Data.Object is not PaymentIntent paymentIntent)
         {
-            _logger.LogWarning("Stripe payment success event had an unexpected payload");
+            _logger.LogWarning("Stripe {EventType} event had an unexpected payload", stripeEvent.Type);
             return BadRequest();
         }
 
-        var applied = await _orderService.ConfirmPaymentAsync(
+        // Transient failures propagate to the exception middleware → 5xx, so
+        // Stripe retries delivery. ProcessStripeEventAsync is idempotent via
+        // the ProcessedStripeEvents ledger.
+        await _orderService.ProcessStripeEventAsync(
+            stripeEvent.Id,
+            stripeEvent.Type,
             paymentIntent.Id,
             paymentIntent.Amount,
             paymentIntent.AmountReceived,
-            paymentIntent.Currency,
+            paymentIntent.Currency ?? string.Empty,
+            paymentIntent.LastPaymentError?.Code,
             cancellationToken);
-
-        if (!applied)
-        {
-            _logger.LogWarning(
-                "Stripe payment intent {PaymentIntentId} did not match a payable order and was not applied",
-                paymentIntent.Id);
-        }
 
         return Ok();
     }

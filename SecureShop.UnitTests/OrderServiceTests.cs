@@ -16,7 +16,9 @@ public class OrderServiceTests
     private readonly Mock<IOrderRepository> _orderRepo = new();
     private readonly Mock<IProductRepository> _productRepo = new();
     private readonly Mock<IPaymentService> _payment = new();
-    private OrderService Svc() => new(_orderRepo.Object, _productRepo.Object, _payment.Object, new NullCacheService(), NullLogger<OrderService>.Instance);
+    private readonly Mock<IUnitOfWork> _unitOfWork = new();
+    private readonly Mock<IStripeEventRepository> _stripeEvents = new();
+    private OrderService Svc() => new(_orderRepo.Object, _productRepo.Object, _payment.Object, new NullCacheService(), _unitOfWork.Object, _stripeEvents.Object, NullLogger<OrderService>.Instance);
 
     private static Product MakeProduct(int stock = 10)
         => Product.Create("Widget", "desc", 9.99m, stock, "Electronics");
@@ -269,12 +271,15 @@ public class OrderServiceTests
         order.SetPaymentIntent("pi_test_123");
         _orderRepo.Setup(r => r.GetByPaymentIntentIdAsync("pi_test_123", It.IsAny<CancellationToken>()))
             .ReturnsAsync(order);
+        _orderRepo.Setup(r => r.TryTransitionStatusAsync(
+                order.Id, OrderStatus.PaymentProcessing, OrderStatus.Paid, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
 
         var result = await Svc().ConfirmPaymentAsync("pi_test_123", 999, 999, "usd");
 
         result.Should().BeTrue();
-        order.Status.Should().Be(OrderStatus.Paid);
-        _orderRepo.Verify(r => r.UpdateAsync(order, It.IsAny<CancellationToken>()), Times.Once);
+        _orderRepo.Verify(r => r.TryTransitionStatusAsync(
+            order.Id, OrderStatus.PaymentProcessing, OrderStatus.Paid, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Theory]
@@ -292,6 +297,8 @@ public class OrderServiceTests
         result.Should().BeFalse();
         order.Status.Should().Be(OrderStatus.PaymentProcessing);
         _orderRepo.Verify(r => r.UpdateAsync(It.IsAny<Order>(), It.IsAny<CancellationToken>()), Times.Never);
+        _orderRepo.Verify(r => r.TryTransitionStatusAsync(
+            It.IsAny<Guid>(), It.IsAny<OrderStatus>(), It.IsAny<OrderStatus>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -319,5 +326,118 @@ public class OrderServiceTests
 
         result.Should().BeFalse();
         _orderRepo.Verify(r => r.UpdateAsync(It.IsAny<Order>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    // ─── ProcessStripeEventAsync ──────────────────────────────────────────────
+
+    private void SetupTransactionPassthrough() =>
+        _unitOfWork.Setup(u => u.ExecuteInTransactionAsync(
+                It.IsAny<Func<Task<bool>>>(), It.IsAny<CancellationToken>()))
+            .Returns((Func<Task<bool>> work, CancellationToken ct) => work());
+
+    private void SetupEventClaim(string eventId, bool firstDelivery) =>
+        _stripeEvents.Setup(r => r.TryRecordProcessedEventAsync(
+                eventId, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(firstDelivery);
+
+    [Fact]
+    public async Task ProcessStripeEventAsync_DuplicateEvent_DoesNoWork()
+    {
+        SetupTransactionPassthrough();
+        SetupEventClaim("evt_dup", firstDelivery: false);
+
+        await Svc().ProcessStripeEventAsync("evt_dup", "payment_intent.canceled", "pi_x", 0, 0, "usd", null);
+
+        _orderRepo.Verify(r => r.TryTransitionStatusAsync(
+            It.IsAny<Guid>(), It.IsAny<OrderStatus>(), It.IsAny<OrderStatus>(), It.IsAny<CancellationToken>()), Times.Never);
+        _productRepo.Verify(r => r.RestoreStockAsync(
+            It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessStripeEventAsync_PaymentFailed_RecordsFailureAndKeepsReservation()
+    {
+        SetupTransactionPassthrough();
+        SetupEventClaim("evt_fail", firstDelivery: true);
+        var order = MakeOrder();
+        order.SetPaymentIntent("pi_fail");
+        _orderRepo.Setup(r => r.GetByPaymentIntentIdAsync("pi_fail", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(order);
+
+        await Svc().ProcessStripeEventAsync("evt_fail", "payment_intent.payment_failed", "pi_fail", 0, 0, "usd", "card_declined");
+
+        order.LastPaymentFailureCode.Should().Be("card_declined");
+        order.LastPaymentFailureAt.Should().NotBeNull();
+        order.Status.Should().Be(OrderStatus.PaymentProcessing);
+        _orderRepo.Verify(r => r.UpdateAsync(order, It.IsAny<CancellationToken>()), Times.Once);
+        _orderRepo.Verify(r => r.TryTransitionStatusAsync(
+            It.IsAny<Guid>(), It.IsAny<OrderStatus>(), It.IsAny<OrderStatus>(), It.IsAny<CancellationToken>()), Times.Never);
+        _productRepo.Verify(r => r.RestoreStockAsync(
+            It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessStripeEventAsync_CanceledPaidOrder_IsIgnored()
+    {
+        SetupTransactionPassthrough();
+        SetupEventClaim("evt_c_paid", firstDelivery: true);
+        var order = MakeOrder();
+        order.SetPaymentIntent("pi_paid");
+        order.MarkAsPaid();
+        _orderRepo.Setup(r => r.GetByPaymentIntentIdAsync("pi_paid", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(order);
+
+        await Svc().ProcessStripeEventAsync("evt_c_paid", "payment_intent.canceled", "pi_paid", 0, 0, "usd", null);
+
+        _orderRepo.Verify(r => r.TryTransitionStatusAsync(
+            It.IsAny<Guid>(), It.IsAny<OrderStatus>(), It.IsAny<OrderStatus>(), It.IsAny<CancellationToken>()), Times.Never);
+        _productRepo.Verify(r => r.RestoreStockAsync(
+            It.IsAny<Guid>(), It.IsAny<int>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessStripeEventAsync_CanceledProcessingOrder_RestoresStockOnce()
+    {
+        SetupTransactionPassthrough();
+        SetupEventClaim("evt_c", firstDelivery: true);
+        var order = MakeOrder();
+        order.SetPaymentIntent("pi_cancel");
+        _orderRepo.Setup(r => r.GetByPaymentIntentIdAsync("pi_cancel", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(order);
+        _orderRepo.Setup(r => r.TryTransitionStatusAsync(
+                order.Id, OrderStatus.PaymentProcessing, OrderStatus.Cancelled, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        await Svc().ProcessStripeEventAsync("evt_c", "payment_intent.canceled", "pi_cancel", 0, 0, "usd", null);
+
+        var item = order.Items.Single();
+        _productRepo.Verify(r => r.RestoreStockAsync(item.ProductId, item.Quantity, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ProcessStripeEventAsync_SucceededForCancelledOrder_RefundsLatePayment()
+    {
+        SetupTransactionPassthrough();
+        SetupEventClaim("evt_late", firstDelivery: true);
+        var order = MakeOrder();
+        order.SetPaymentIntent("pi_late");
+        _orderRepo.Setup(r => r.GetByPaymentIntentIdAsync("pi_late", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(order);
+        // Simulate the cancel having already won the race: the atomic
+        // PaymentProcessing→Paid transition affects 0 rows and the committed
+        // status reads back as Cancelled.
+        _orderRepo.Setup(r => r.TryTransitionStatusAsync(
+                order.Id, OrderStatus.PaymentProcessing, OrderStatus.Paid, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        _orderRepo.Setup(r => r.GetStatusByPaymentIntentIdAsync("pi_late", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(OrderStatus.Cancelled);
+        _payment.Setup(p => p.RefundPaymentIntentAsync("pi_late", $"secure-shop-refund-{order.Id}"))
+            .ReturnsAsync("re_late_123");
+
+        await Svc().ProcessStripeEventAsync("evt_late", "payment_intent.succeeded", "pi_late", 999, 999, "usd", null);
+
+        order.StripeRefundId.Should().Be("re_late_123");
+        order.Status.Should().Be(OrderStatus.PaymentProcessing); // never marked Paid
+        _payment.Verify(p => p.RefundPaymentIntentAsync("pi_late", $"secure-shop-refund-{order.Id}"), Times.Once);
     }
 }

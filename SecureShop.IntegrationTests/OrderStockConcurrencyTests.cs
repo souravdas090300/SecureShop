@@ -63,7 +63,8 @@ public class OrderStockConcurrencyTests
             {
                 // Replace Stripe with a deterministic fake; stock reservation is
                 // the behaviour under test, not payment processing.
-                services.AddScoped<IPaymentService>(_ => new FakePaymentService());
+                services.AddSingleton<FakePaymentService>();
+                services.AddScoped<IPaymentService>(sp => sp.GetRequiredService<FakePaymentService>());
             });
         });
 
@@ -157,11 +158,4 @@ public class OrderStockConcurrencyTests
         throw new TimeoutException("Database migrations did not complete in time.");
     }
 
-    private sealed class FakePaymentService : IPaymentService
-    {
-        public Task<PaymentIntentDetails> CreatePaymentIntentAsync(decimal amount, string currency, Guid orderId)
-            => Task.FromResult(new PaymentIntentDetails($"pi_test_{Guid.NewGuid():N}", "secret"));
-
-        public Task CancelPaymentIntentAsync(string paymentIntentId) => Task.CompletedTask;
-    }
 }
