@@ -46,6 +46,26 @@ catch (Exception ex)
     // Fall back to default logging so the app can still start
 }
 
+// ── Production database guard ────────────────────────────────────────────────
+// Fail fast instead of starting against the placeholder/localhost fallback —
+// a misconfigured deploy would otherwise serve traffic with every DB call
+// failing. Diagnostics never include secrets.
+using var serilogLoggerProvider = new Serilog.Extensions.Logging.SerilogLoggerProvider(Log.Logger);
+var startupLogger = serilogLoggerProvider.CreateLogger("Startup");
+DatabaseConnectionGuard.LogDiagnostics(builder.Configuration, builder.Environment.IsProduction(), startupLogger);
+var dbStatus = DatabaseConnectionGuard.Evaluate(
+    builder.Configuration.GetConnectionString("DefaultConnection"),
+    builder.Environment.IsProduction());
+if (dbStatus != DatabaseConnectionStatus.Ok)
+{
+    Log.Fatal(
+        "Refusing to start: ConnectionStrings__DefaultConnection is {Reason}. " +
+        "Set the Railway env var ConnectionStrings__DefaultConnection to a valid Npgsql connection string " +
+        "(e.g. Host=...;Username=...;Password=...;Database=...;SSL Mode=Require).",
+        dbStatus == DatabaseConnectionStatus.Missing ? "missing or empty" : "unsafe for Production (localhost/placeholder or unparseable)");
+    Environment.Exit(1);
+}
+
 // ── Application & Infrastructure services ────────────────────────────────────
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
