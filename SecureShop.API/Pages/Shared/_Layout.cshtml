@@ -229,11 +229,6 @@
                                 <ul class="dropdown-menu dropdown-menu-end">
                                     <li><a class="dropdown-item" href="/account/profile"><i class="fas fa-user"></i> My Profile</a></li>
                                     <li><a class="dropdown-item" href="/account/orders"><i class="fas fa-box"></i> My Orders</a></li>
-                                    @if (User.IsInRole("Admin"))
-                                    {
-                                        <li><hr class="dropdown-divider"></li>
-                                        <li><a class="dropdown-item text-primary fw-bold" href="/admin"><i class="fas fa-shield-alt"></i> Admin Dashboard</a></li>
-                                    }
                                     <li><hr class="dropdown-divider"></li>
                                     <li>
                                         <form id="user-logout-form" method="post" action="/account/logout" style="display:none">

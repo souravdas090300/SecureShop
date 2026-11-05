@@ -431,6 +431,12 @@
             
             <li class="nav-section-title">Settings</li>
             <li class="nav-item">
+                <a href="/admin/twofactor" class="nav-link @(Context.Request.Path.StartsWithSegments("/admin/twofactor") ? "active" : "")">
+                    <i class="fas fa-shield-alt"></i>
+                    <span>Two-Factor Auth</span>
+                </a>
+            </li>
+            <li class="nav-item">
                 <a href="/admin/settings" class="nav-link @(Context.Request.Path.StartsWithSegments("/admin/settings") ? "active" : "")">
                     <i class="fas fa-cog"></i>
                     <span>Settings</span>

@@ -1,0 +1,64 @@
+@page
+@model SecureShop.API.Pages.Admin.TwoFactorModel
+@{
+    ViewData["Title"] = "Two-Factor Authentication";
+}
+
+<div class="container py-4" style="max-width: 640px;">
+    <h2>Two-Factor Authentication</h2>
+
+    @if (!string.IsNullOrEmpty(Model.Message))
+    {
+        <div class="alert @(Model.IsError ? "alert-danger" : "alert-success")">@Model.Message</div>
+    }
+
+    @if (Model.ShowRecoveryCodes)
+    {
+        <div class="alert alert-warning">
+            <strong>Recovery codes</strong> — store these somewhere safe. Each can be used once if you lose your authenticator.
+            <ul class="mt-2 mb-0">
+                @foreach (var c in Model.RecoveryCodes!) { <li><code>@c</code></li> }
+            </ul>
+        </div>
+    }
+
+    @if (!Model.IsEnabled)
+    {
+        <p>Protect your admin account with an authenticator app (Microsoft Authenticator, Google Authenticator, 1Password, etc.).</p>
+        @if (!string.IsNullOrEmpty(Model.SetupKey))
+        {
+            <div class="card mb-3">
+                <div class="card-body">
+                    <p class="mb-1">Add this account manually using the key below, or open the URI on your device:</p>
+                    <p><code class="user-select-all">@Model.SetupKey</code></p>
+                    <p class="small text-muted text-break">@Model.AuthenticatorUri</p>
+                </div>
+            </div>
+            <form method="post" asp-page-handler="Enable" class="d-flex gap-2">
+                @Html.AntiForgeryToken()
+                <input name="Code" class="form-control" style="max-width:200px" placeholder="6-digit code" inputmode="numeric" required />
+                <button class="btn btn-danger">Enable 2FA</button>
+            </form>
+        }
+        else
+        {
+            <form method="post" asp-page-handler="Setup">
+                @Html.AntiForgeryToken()
+                <button class="btn btn-danger">Set up two-factor authentication</button>
+            </form>
+        }
+    }
+    else
+    {
+        <p class="text-success"><i class="fas fa-check-circle"></i> Two-factor authentication is <strong>enabled</strong> for your account.</p>
+        <form method="post" asp-page-handler="Disable" class="d-flex gap-2 mb-4">
+            @Html.AntiForgeryToken()
+            <input name="Password" type="password" class="form-control" style="max-width:250px" placeholder="Confirm password" required />
+            <button class="btn btn-outline-danger">Disable 2FA</button>
+        </form>
+        <form method="post" asp-page-handler="RecoveryCodes">
+            @Html.AntiForgeryToken()
+            <button class="btn btn-outline-secondary">Generate new recovery codes</button>
+        </form>
+    }
+</div>

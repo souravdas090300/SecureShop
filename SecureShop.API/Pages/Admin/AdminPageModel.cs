@@ -13,7 +13,7 @@ namespace SecureShop.API.Pages.Admin;
 /// to <c>/admin/login</c> before any handler executes.
 /// All admin page models should inherit from this class instead of <see cref="PageModel"/>.
 /// </summary>
-[Authorize(AuthenticationSchemes = "AdminCookie", Roles = "Admin")]
+[Authorize(Policy = "AdminOnly")]
 public class AdminPageModel : PageModel
 {
     /// <summary>The display name of the authenticated administrator, shown in the admin layout header.</summary>

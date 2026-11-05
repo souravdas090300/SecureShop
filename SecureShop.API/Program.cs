@@ -106,6 +106,11 @@ builder.Services.AddAuthentication(options =>
         options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
         options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
         options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+        // AddIdentity sets DefaultForbidScheme=Identity.Application, whose
+        // AccessDeniedPath redirects to /Account/AccessDenied. Forbid must go
+        // through AdminCookie (empty AccessDeniedPath -> HTTP 403) so that
+        // authenticated non-admins get a real 403 instead of a redirect.
+        options.DefaultForbidScheme = "AdminCookie";
     })
     .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
     {
@@ -123,17 +128,28 @@ builder.Services.AddAuthentication(options =>
     .AddCookie("AdminCookie", options =>
     {
         options.Cookie.Name = ".SecureShop.Admin";
+        options.Cookie.Path = "/admin";
         options.LoginPath = "/admin/login";
         options.LogoutPath = "/admin/logout";
-        options.AccessDeniedPath = "/admin/login";
-        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        // Empty AccessDeniedPath: authenticated-but-forbidden users get HTTP 403
+        // rather than being bounced back to the login form. Must be
+        // PathString.Empty (Value=null) — string.Empty still HasValue and
+        // would redirect to an empty path.
+        options.AccessDeniedPath = PathString.Empty;
+        options.ExpireTimeSpan = TimeSpan.FromMinutes(45);
         options.SlidingExpiration = true;
         options.Cookie.HttpOnly = true;
         options.Cookie.SecurePolicy = cookieSecurePolicy;
-        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SameSite = SameSiteMode.Strict;
         options.Cookie.IsEssential = true;
         options.Events = new CookieAuthenticationEvents
         {
+            // Authenticated-but-forbidden -> HTTP 403, never a redirect.
+            OnRedirectToAccessDenied = context =>
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return Task.CompletedTask;
+            },
             OnValidatePrincipal = context =>
             {
                 if (context.Principal?.Identity?.IsAuthenticated == true)
@@ -179,9 +195,15 @@ builder.Services.AddAuthorization(options =>
         policy.RequireRole("Admin");
     });
     
-    // Admin Razor Pages
-    options.AddPolicy("AdminPolicy", policy =>
+    // Admin Razor Pages. Both cookie schemes are authenticated so that a
+    // signed-in Customer is recognised (and gets 403 for lacking the Admin
+    // role) while anonymous users are challenged. Scheme order matters:
+    // challenge/forbid iterate the list and the LAST scheme wins, so
+    // AdminCookie is last — anonymous -> /admin/login, forbidden -> 403
+    // (AdminCookie has an empty AccessDeniedPath).
+    options.AddPolicy("AdminOnly", policy =>
     {
+        policy.AuthenticationSchemes.Add(CookieAuthenticationDefaults.AuthenticationScheme);
         policy.AuthenticationSchemes.Add("AdminCookie");
         policy.RequireRole("Admin");
     });
@@ -208,6 +230,17 @@ builder.Services.AddRateLimiter(options =>
             _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
+    // Dedicated stricter bucket for the admin sign-in endpoint.
+    options.AddPolicy("adminlogin", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0,
                 AutoReplenishment = true
@@ -275,8 +308,11 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddRazorPages(options =>
 {
     // Admin pages require AdminCookie authentication scheme
-    options.Conventions.AuthorizeFolder("/Admin", "AdminPolicy");
+    options.Conventions.AuthorizeFolder("/Admin", "AdminOnly");
     options.Conventions.AllowAnonymousToPage("/Admin/Login");
+    // The TOTP challenge page is anonymous at the routing layer but self-guards:
+    // without the short-lived TwoFactorUserIdScheme cookie it redirects to login.
+    options.Conventions.AllowAnonymousToPage("/Admin/Login2fa");
 });
 
 // ── Port (Railway injects PORT env var) ──────────────────────────────────────
@@ -314,6 +350,19 @@ app.UseForwardedHeaders(forwardedHeadersOptions);
 
 // 1. Security headers — outermost so every response gets them
 app.UseMiddleware<SecurityHeadersMiddleware>();
+
+// Admin area: never index, never cache. Applies to /admin and /admin/* only.
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value ?? string.Empty;
+    if (path.Equals("/admin", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith("/admin/", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Response.Headers["X-Robots-Tag"] = "noindex, nofollow";
+        context.Response.Headers["Cache-Control"] = "no-store";
+    }
+    await next();
+});
 
 // 2. Global exception handler
 app.UseMiddleware<GlobalExceptionMiddleware>();
