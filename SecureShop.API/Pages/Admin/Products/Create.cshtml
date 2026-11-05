@@ -291,7 +291,10 @@ async function createProduct() {
         const res = await fetch(`${apiBaseUrl}/api/products`, {
             method: 'POST',
             credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'RequestVerificationToken': document.querySelector('meta[name="csrf-token"]')?.content ?? ''
+            },
             body: JSON.stringify({ name, description, price, stockQuantity: stock, category, imageUrl: imageUrl || null })
         });
         if (res.ok) {
@@ -318,10 +321,5 @@ function showAlert(msg, type) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function getCookie(n) {
-    const v = `; ${document.cookie}`, p = v.split(`; ${n}=`);
-    if (p.length === 2) return p.pop().split(';').shift();
-    return null;
-}
 </script>
 }

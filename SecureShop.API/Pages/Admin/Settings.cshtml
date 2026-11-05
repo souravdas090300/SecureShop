@@ -265,7 +265,10 @@
         btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Clearing...';
         fetch('/api/admin/cache/clear', {
             method: 'POST',
-            headers: { 'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]')?.value ?? '' }
+            credentials: 'include',
+            headers: {
+                'RequestVerificationToken': document.querySelector('meta[name="csrf-token"]')?.content ?? ''
+            }
         })
         .then(r => {
             if (r.ok) {

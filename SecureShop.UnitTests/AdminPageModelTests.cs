@@ -490,15 +490,10 @@ public class AdminLoginModelTests
             userManager.Object,
             new Mock<IHttpContextAccessor>().Object,
             new Mock<Microsoft.AspNetCore.Identity.IUserClaimsPrincipalFactory<SecureShop.Domain.Entities.ApplicationUser>>().Object,
-            null, null, null, null);
-
-        var factory = new Mock<IHttpClientFactory>();
-        factory.Setup(f => f.CreateClient(It.IsAny<string>()))
-               .Returns(new System.Net.Http.HttpClient());
-        var config = new Mock<IConfiguration>();
+            null!, null!, null!, null!);
 
         var model = new AdminLoginModel(
-            userManager.Object, signInManager.Object, logger.Object, config.Object, factory.Object);
+            userManager.Object, signInManager.Object, logger.Object);
         AdminTestHelper.SetupPageContext(model);
         model.TempData = AdminTestHelper.EmptyTempData();
 
@@ -516,8 +511,9 @@ public class AdminLoginModelPostTests
     private static (
         Mock<UserManager<ApplicationUser>> um,
         AdminLoginModel model,
-        Mock<IAuthenticationService> authSvc)
-    Create(IConfiguration? config = null)
+        Mock<IAuthenticationService> authSvc,
+        Mock<SignInManager<ApplicationUser>> signInManager)
+    Create()
     {
         var store = new Mock<IUserStore<ApplicationUser>>();
         var um    = new Mock<UserManager<ApplicationUser>>(
@@ -527,7 +523,7 @@ public class AdminLoginModelPostTests
             um.Object,
             new Mock<IHttpContextAccessor>().Object,
             new Mock<IUserClaimsPrincipalFactory<ApplicationUser>>().Object,
-            null, null, null, null);
+            null!, null!, null!, null!);
 
         var logger  = new Mock<ILogger<AdminLoginModel>>();
         var authSvc = new Mock<IAuthenticationService>();
@@ -540,21 +536,15 @@ public class AdminLoginModelPostTests
             .AddSingleton(authSvc.Object)
             .BuildServiceProvider();
 
-        var factory = new Mock<IHttpClientFactory>();
-        factory.Setup(f => f.CreateClient(It.IsAny<string>())).Returns(new HttpClient());
-
-        // Jwt config needs a real 32-byte secret so JwtSecurityTokenHandler can sign
-        config ??= new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Jwt:Secret"]   = AccountTestHelper.TestSecret,
-                ["Jwt:Issuer"]   = "test",
-                ["Jwt:Audience"] = "test",
-            })
-            .Build();
-
         var model = new AdminLoginModel(
-            um.Object, signInManager.Object, logger.Object, config, factory.Object);
+            um.Object, signInManager.Object, logger.Object);
+
+        um.Setup(u => u.GetLockoutEnabledAsync(It.IsAny<ApplicationUser>())).ReturnsAsync(false);
+        um.Setup(u => u.SetLockoutEnabledAsync(
+            It.IsAny<ApplicationUser>(), true)).ReturnsAsync(IdentityResult.Success);
+        signInManager.Setup(s => s.CheckPasswordSignInAsync(
+            It.IsAny<ApplicationUser>(), It.IsAny<string>(), true))
+            .ReturnsAsync(Microsoft.AspNetCore.Identity.SignInResult.Failed);
 
         var httpContext = new DefaultHttpContext { RequestServices = sp };
         httpContext.Request.Scheme = "http";
@@ -563,13 +553,13 @@ public class AdminLoginModelPostTests
             new ActionContext(httpContext, new RouteData(), new PageActionDescriptor()));
         model.TempData = AdminTestHelper.EmptyTempData();
 
-        return (um, model, authSvc);
+        return (um, model, authSvc, signInManager);
     }
 
     [Fact]
     public async Task OnPostAsync_UserNotFound_SetsErrorMessage()
     {
-        var (um, model, _) = Create();
+        var (um, model, _, _) = Create();
         um.Setup(u => u.FindByEmailAsync(It.IsAny<string>())).ReturnsAsync((ApplicationUser?)null);
         model.Email    = "nobody@example.com";
         model.Password = "Pass123!";
@@ -583,12 +573,32 @@ public class AdminLoginModelPostTests
     [Fact]
     public async Task OnPostAsync_WrongPassword_SetsErrorMessage()
     {
-        var (um, model, _) = Create();
+        var (um, model, _, signInManager) = Create();
         var user = new ApplicationUser { Id = "u1", Email = "admin@example.com", FirstName = "A", LastName = "B" };
         um.Setup(u => u.FindByEmailAsync("admin@example.com")).ReturnsAsync(user);
-        um.Setup(u => u.CheckPasswordAsync(user, "WrongPass!")).ReturnsAsync(false);
+        signInManager.Setup(s => s.CheckPasswordSignInAsync(user, "WrongPass!", true))
+            .ReturnsAsync(Microsoft.AspNetCore.Identity.SignInResult.Failed);
         model.Email    = "admin@example.com";
         model.Password = "WrongPass!";
+
+        var result = await model.OnPostAsync();
+
+        result.Should().BeOfType<PageResult>();
+        model.ErrorMessage.Should().Be("Invalid admin credentials");
+        signInManager.Verify(s => s.CheckPasswordSignInAsync(user, "WrongPass!", true), Times.Once);
+    }
+
+    [Fact]
+    public async Task OnPostAsync_NotInAdminRole_UsesGenericCredentialError()
+    {
+        var (um, model, _, signInManager) = Create();
+        var user = new ApplicationUser { Id = "u1", Email = "user@example.com", FirstName = "A", LastName = "B" };
+        um.Setup(u => u.FindByEmailAsync("user@example.com")).ReturnsAsync(user);
+        signInManager.Setup(s => s.CheckPasswordSignInAsync(user, "Pass123!", true))
+            .ReturnsAsync(Microsoft.AspNetCore.Identity.SignInResult.Success);
+        um.Setup(u => u.IsInRoleAsync(user, "Admin")).ReturnsAsync(false);
+        model.Email    = "user@example.com";
+        model.Password = "Pass123!";
 
         var result = await model.OnPostAsync();
 
@@ -597,33 +607,17 @@ public class AdminLoginModelPostTests
     }
 
     [Fact]
-    public async Task OnPostAsync_NotInAdminRole_SetsAccessDeniedMessage()
-    {
-        var (um, model, _) = Create();
-        var user = new ApplicationUser { Id = "u1", Email = "user@example.com", FirstName = "A", LastName = "B" };
-        um.Setup(u => u.FindByEmailAsync("user@example.com")).ReturnsAsync(user);
-        um.Setup(u => u.CheckPasswordAsync(user, "Pass123!")).ReturnsAsync(true);
-        um.Setup(u => u.IsInRoleAsync(user, "Admin")).ReturnsAsync(false);
-        model.Email    = "user@example.com";
-        model.Password = "Pass123!";
-
-        var result = await model.OnPostAsync();
-
-        result.Should().BeOfType<PageResult>();
-        model.ErrorMessage.Should().Contain("Access denied");
-    }
-
-    [Fact]
     public async Task OnPostAsync_ValidAdmin_SignsInAndRedirectsToAdminRoot()
     {
-        var (um, model, authSvc) = Create();
+        var (um, model, authSvc, signInManager) = Create();
         var user = new ApplicationUser
         {
             Id = "u1", Email = "admin@example.com",
             FirstName = "Admin", LastName = "User"
         };
         um.Setup(u => u.FindByEmailAsync("admin@example.com")).ReturnsAsync(user);
-        um.Setup(u => u.CheckPasswordAsync(user, "AdminPass123!")).ReturnsAsync(true);
+        signInManager.Setup(s => s.CheckPasswordSignInAsync(user, "AdminPass123!", true))
+            .ReturnsAsync(Microsoft.AspNetCore.Identity.SignInResult.Success);
         um.Setup(u => u.IsInRoleAsync(user, "Admin")).ReturnsAsync(true);
         um.Setup(u => u.GetRolesAsync(user)).ReturnsAsync(new List<string> { "Admin" });
         model.Email    = "admin@example.com";
@@ -640,7 +634,7 @@ public class AdminLoginModelPostTests
     [Fact]
     public async Task OnPostAsync_ThrowsException_SetsErrorMessage()
     {
-        var (um, model, _) = Create();
+        var (um, model, _, _) = Create();
         um.Setup(u => u.FindByEmailAsync(It.IsAny<string>()))
           .ThrowsAsync(new Exception("db crash"));
         model.Email    = "admin@example.com";

@@ -33,8 +33,7 @@ const orderId = '@Model.OrderId';
 async function loadOrder() {
     try {
         const res = await fetch(`${apiBaseUrl}/api/orders/${orderId}`, {
-            credentials: 'include',
-            headers: { 'Authorization': `Bearer ${getCookie('AuthToken')}` }
+            credentials: 'include'
         });
         if (!res.ok) { document.getElementById('orderContent').innerHTML = '<div class="alert alert-danger">Order not found</div>'; return; }
         const order = await res.json();
@@ -45,9 +44,14 @@ async function loadOrder() {
 }
 
 function renderOrder(order) {
-    const statusMap = {0:'Pending',1:'Processing',2:'Shipped',3:'Completed',4:'Cancelled'};
-    const classMap = {0:'warning',1:'info',2:'primary',3:'success',4:'danger'};
-    const s = order.status;
+    const statusMap = {0:'Pending',1:'Payment processing',2:'Paid',3:'Shipped',4:'Delivered',5:'Cancelled'};
+    const classMap = {0:'warning',1:'info',2:'success',3:'primary',4:'success',5:'danger'};
+    const s = getStatusValue(order.status);
+    const nextStatus = s === 2 ? 3 : (s === 3 ? 4 : null);
+    const statusControls = nextStatus === null
+        ? '<p class="text-muted mb-0">Shipping actions are available after payment is confirmed.</p>'
+        : `<select class="form-select mb-3" id="statusSelect"><option value="${nextStatus}">${statusMap[nextStatus]}</option></select>
+           <button class="btn btn-primary w-100" onclick="updateStatus('${order.id}')"><i class="fas fa-save me-2"></i>Update</button>`;
     const items = (order.items||[]).map(i=>`
         <tr>
             <td>${i.productName||'N/A'}</td>
@@ -84,16 +88,16 @@ function renderOrder(order) {
                 <div class="card">
                     <div class="card-body">
                         <h6 class="fw-bold mb-3">Update Status</h6>
-                        <select class="form-select mb-3" id="statusSelect">
-                            ${[0,1,2,3,4].map(v=>`<option value="${v}" ${v===s?'selected':''}>${statusMap[v]}</option>`).join('')}
-                        </select>
-                        <button class="btn btn-primary w-100" onclick="updateStatus('${order.id}')">
-                            <i class="fas fa-save me-2"></i>Update
-                        </button>
+                        ${statusControls}
                     </div>
                 </div>
             </div>
         </div>`;
+}
+
+function getStatusValue(status) {
+    const names = {Pending:0, PaymentProcessing:1, Processing:1, Paid:2, Shipped:3, Delivered:4, Completed:4, Cancelled:5};
+    return typeof status === 'string' ? names[status] : status;
 }
 
 async function updateStatus(id) {
@@ -101,13 +105,15 @@ async function updateStatus(id) {
     const res = await fetch(`${apiBaseUrl}/api/orders/${id}/status`, {
         method:'PUT',
         credentials: 'include',
-        headers:{'Content-Type':'application/json'},
+        headers:{
+            'Content-Type':'application/json',
+            'RequestVerificationToken': document.querySelector('meta[name="csrf-token"]')?.content ?? ''
+        },
         body: JSON.stringify({status})
     });
     if (res.ok) { loadOrder(); } else { alert('Failed to update status'); }
 }
 
-function getCookie(n){const v=`; ${document.cookie}`,p=v.split(`; ${n}=`);if(p.length===2)return p.pop().split(';').shift();return null;}
 document.addEventListener('DOMContentLoaded', loadOrder);
 </script>
 }

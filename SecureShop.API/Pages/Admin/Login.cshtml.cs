@@ -4,7 +4,6 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using SecureShop.Domain.Entities;
-using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 
 namespace SecureShop.API.Pages.Admin;
@@ -12,29 +11,22 @@ namespace SecureShop.API.Pages.Admin;
 /// <summary>
 /// Page model for the admin login page.
 /// Authenticates against ASP.NET Core Identity, verifies the Admin role,
-/// generates an <c>AdminCookie</c> cookie-based identity from the returned JWT claims,
-/// and redirects to the admin dashboard on success.
+/// and establishes the protected <c>AdminCookie</c> session.
 /// </summary>
 public class AdminLoginModel : PageModel
 {
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly ILogger<AdminLoginModel> _logger;
-    private readonly IConfiguration _configuration;
-    private readonly HttpClient _httpClient;
 
     public AdminLoginModel(
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager,
-        ILogger<AdminLoginModel> logger,
-        IConfiguration configuration,
-        IHttpClientFactory httpClientFactory)
+        ILogger<AdminLoginModel> logger)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _logger = logger;
-        _configuration = configuration;
-        _httpClient = httpClientFactory.CreateClient();
     }
 
     [BindProperty]
@@ -52,24 +44,30 @@ public class AdminLoginModel : PageModel
 
     public async Task<IActionResult> OnPostAsync()
     {
-        _logger.LogInformation("[AdminLogin] Admin login attempt for: {Email}", Email);
-
         try
         {
-            // Find user
             var user = await _userManager.FindByEmailAsync(Email);
             if (user == null)
             {
-                _logger.LogWarning("[AdminLogin] User not found: {Email}", Email);
+                _logger.LogWarning("Admin login failed because the account was not found");
                 ErrorMessage = "Invalid admin credentials";
                 return Page();
             }
 
-            // Verify password
-            var passwordValid = await _userManager.CheckPasswordAsync(user, Password);
-            if (!passwordValid)
+            if (!await _userManager.GetLockoutEnabledAsync(user))
             {
-                _logger.LogWarning("[AdminLogin] Invalid password for: {Email}", Email);
+                var enableLockout = await _userManager.SetLockoutEnabledAsync(user, true);
+                if (!enableLockout.Succeeded)
+                    throw new InvalidOperationException("Could not enable account lockout.");
+            }
+
+            var passwordResult = await _signInManager.CheckPasswordSignInAsync(
+                user,
+                Password,
+                lockoutOnFailure: true);
+            if (!passwordResult.Succeeded)
+            {
+                _logger.LogWarning("Admin login failed because credentials were invalid or locked out");
                 ErrorMessage = "Invalid admin credentials";
                 return Page();
             }
@@ -78,14 +76,11 @@ public class AdminLoginModel : PageModel
             var isAdmin = await _userManager.IsInRoleAsync(user, "Admin");
             if (!isAdmin)
             {
-                _logger.LogWarning("[AdminLogin] User {Email} attempted admin login without Admin role", Email);
-                ErrorMessage = "Access denied. Admin privileges required.";
+                _logger.LogWarning("A non-admin account attempted to access the admin login");
+                ErrorMessage = "Invalid admin credentials";
                 return Page();
             }
 
-            _logger.LogInformation("[AdminLogin] Admin role verified for: {Email}", Email);
-
-            // Get user roles
             var roles = await _userManager.GetRolesAsync(user);
 
             // Create claims
@@ -122,63 +117,12 @@ public class AdminLoginModel : PageModel
                     AllowRefresh = true
                 });
 
-            _logger.LogInformation("[AdminLogin] Admin signed in successfully: {Email}", Email);
-
-            // Issue JWT so JS fetch calls (create/edit/delete product) can authenticate via Bearer
-            var jwtSecret = _configuration["Jwt:Secret"];
-            if (string.IsNullOrEmpty(jwtSecret))
-            {
-                _logger.LogError("[AdminLogin] Jwt:Secret is not configured");
-                ErrorMessage = "Server configuration error: JWT secret is missing. Contact the administrator.";
-                return Page();
-            }
-
-            var jwtIssuer   = _configuration["Jwt:Issuer"];
-            var jwtAudience = _configuration["Jwt:Audience"];
-            if (string.IsNullOrEmpty(jwtIssuer) || string.IsNullOrEmpty(jwtAudience))
-            {
-                _logger.LogError("[AdminLogin] Jwt:Issuer or Jwt:Audience is not configured");
-                ErrorMessage = "Server configuration error: JWT issuer/audience is missing. Contact the administrator.";
-                return Page();
-            }
-
-            var tokenHandler = new JwtSecurityTokenHandler();
-            var key = System.Text.Encoding.UTF8.GetBytes(jwtSecret);
-            var tokenDescriptor = new Microsoft.IdentityModel.Tokens.SecurityTokenDescriptor
-            {
-                Subject = new ClaimsIdentity(claims),
-                Expires = DateTime.UtcNow.AddHours(8),
-                Issuer = jwtIssuer,
-                Audience = jwtAudience,
-                SigningCredentials = new Microsoft.IdentityModel.Tokens.SigningCredentials(
-                    new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(key),
-                    Microsoft.IdentityModel.Tokens.SecurityAlgorithms.HmacSha256Signature)
-            };
-            var token = tokenHandler.CreateToken(tokenDescriptor);
-            var jwtString = tokenHandler.WriteToken(token);
-
-            Response.Cookies.Append("AuthToken", jwtString, new CookieOptions
-            {
-                HttpOnly = false,
-                Secure = Request.IsHttps,
-                SameSite = SameSiteMode.Lax,
-                Expires = DateTimeOffset.UtcNow.AddHours(8),
-                Path = "/"
-            });
-
-            // Redirect to admin dashboard
+            _logger.LogInformation("Admin login succeeded for user {UserId}", user.Id);
             return Redirect("/admin");
         }
         catch (Exception ex)
         {
-            // Build full exception chain for diagnostics (SocketException is often an inner exception).
-            var innerChain = ex.InnerException is not null
-                ? $" | Inner: [{ex.InnerException.GetType().Name}] {ex.InnerException.Message}"
-                : string.Empty;
-
-            _logger.LogError(ex,
-                "[AdminLogin] Login failed for {Email}. Type: {ExType} | Message: {ExMsg}{Inner}",
-                Email, ex.GetType().Name, ex.Message, innerChain);
+            _logger.LogError(ex, "Admin login failed due to an internal error");
 
             // SocketException (or Npgsql wrapping one) means the DB server is temporarily unreachable.
             // On Neon free tier this happens after the instance auto-pauses.
@@ -188,8 +132,8 @@ public class AdminLoginModel : PageModel
                 || ex.Message.Contains("connection", StringComparison.OrdinalIgnoreCase);
 
             ErrorMessage = isSocketError
-                ? "Database connection failed. The server may be waking up — please wait a few seconds and try again."
-                : $"Login failed ({ex.GetType().Name}). Check server logs for details.";
+                ? "The authentication service is temporarily unavailable. Please try again shortly."
+                : "Unable to sign in right now. Please try again later.";
 
             return Page();
         }

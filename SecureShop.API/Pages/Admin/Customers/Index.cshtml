@@ -86,7 +86,6 @@ document.getElementById('searchInput').addEventListener('input', function(){
 function clearSearch(){ document.getElementById('searchInput').value=''; renderCustomers(allCustomers); }
 function showTableMsg(id, cols, msg){ document.querySelector(`#${id} tbody`).innerHTML=`<tr><td colspan="${cols}" class="text-center py-4 text-muted">${msg}</td></tr>`; }
 function escHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
-function getCookie(n){const v=`; ${document.cookie}`,p=v.split(`; ${n}=`);if(p.length===2)return p.pop().split(';').shift();return null;}
 document.addEventListener('DOMContentLoaded', loadCustomers);
 </script>
 }

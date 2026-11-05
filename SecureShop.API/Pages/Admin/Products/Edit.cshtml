@@ -177,7 +177,10 @@ async function updateProduct() {
     const res = await fetch(`${apiBaseUrl}/api/products/${productId}`, {
         method: 'PUT',
         credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            'RequestVerificationToken': document.querySelector('meta[name="csrf-token"]')?.content ?? ''
+        },
         body: JSON.stringify({ name, description, price, category, stockQuantity: stock, imageUrl: imageUrl || null })
     });
 
@@ -273,7 +276,6 @@ function removeImage() {
 }
 
 function escHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
-function getCookie(n) { const v = `; ${document.cookie}`, p = v.split(`; ${n}=`); if (p.length === 2) return p.pop().split(';').shift(); return null; }
 document.addEventListener('DOMContentLoaded', loadProduct);
 </script>
 }

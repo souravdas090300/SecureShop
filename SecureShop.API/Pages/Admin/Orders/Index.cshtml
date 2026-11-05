@@ -30,10 +30,11 @@
                     <select class="form-select" id="statusFilter">
                         <option value="">All Status</option>
                         <option value="0">Pending</option>
-                        <option value="1">Processing</option>
-                        <option value="2">Shipped</option>
-                        <option value="3">Completed</option>
-                        <option value="4">Cancelled</option>
+                        <option value="1">Payment processing</option>
+                        <option value="2">Paid</option>
+                        <option value="3">Shipped</option>
+                        <option value="4">Delivered</option>
+                        <option value="5">Cancelled</option>
                     </select>
                 </div>
                 <div class="col-md-3">
@@ -143,6 +144,7 @@
 
             tbody.innerHTML = orders.map(order => {
                 const statusBadge = getStatusBadge(order.status);
+                const nextStatus = getNextStatus(order.status);
                 const date = new Date(order.createdAt || order.orderDate).toLocaleString();
                 const itemCount = order.items ? order.items.length : 0;
 
@@ -159,9 +161,7 @@
                                 <button class="btn btn-sm btn-outline-primary" onclick="viewOrderDetails('${order.id}')" title="View Details">
                                     <i class="fas fa-eye"></i>
                                 </button>
-                                <button class="btn btn-sm btn-outline-success" onclick="updateOrderStatus('${order.id}', ${getNextStatus(order.status)})" title="Update Status">
-                                    <i class="fas fa-arrow-right"></i>
-                                </button>
+                                ${nextStatus === null ? '' : `<button class="btn btn-sm btn-outline-success" onclick="updateOrderStatus('${order.id}', ${nextStatus})" title="Advance order status"><i class="fas fa-arrow-right"></i></button>`}
                             </div>
                         </td>
                     </tr>
@@ -172,22 +172,26 @@
         function getStatusBadge(status) {
             const statusMap = {
                 0: { label: 'Pending', class: 'warning' },
-                1: { label: 'Processing', class: 'info' },
-                2: { label: 'Shipped', class: 'primary' },
-                3: { label: 'Completed', class: 'success' },
-                4: { label: 'Cancelled', class: 'danger' }
+                1: { label: 'Payment processing', class: 'info' },
+                2: { label: 'Paid', class: 'success' },
+                3: { label: 'Shipped', class: 'primary' },
+                4: { label: 'Delivered', class: 'success' },
+                5: { label: 'Cancelled', class: 'danger' }
             };
-            
-            const statusInfo = statusMap[status] || { label: 'Unknown', class: 'secondary' };
+            const statusInfo = statusMap[getStatusValue(status)] || { label: 'Unknown', class: 'secondary' };
             return `<span class="badge bg-${statusInfo.class}">${statusInfo.label}</span>`;
         }
 
+        function getStatusValue(status) {
+            const names = { Pending: 0, PaymentProcessing: 1, Processing: 1, Paid: 2, Shipped: 3, Delivered: 4, Completed: 4, Cancelled: 5 };
+            return typeof status === 'string' ? names[status] : status;
+        }
+
         function getNextStatus(currentStatus) {
-            // Pending -> Processing -> Shipped -> Completed
-            if (currentStatus === 0) return 1; // Pending -> Processing
-            if (currentStatus === 1) return 2; // Processing -> Shipped
-            if (currentStatus === 2) return 3; // Shipped -> Completed
-            return currentStatus; // Already completed or cancelled
+            const status = getStatusValue(currentStatus);
+            if (status === 2) return 3;
+            if (status === 3) return 4;
+            return null;
         }
 
         async function viewOrderDetails(orderId) {
@@ -202,8 +206,7 @@
 
             try {
                 const response = await fetch(`${apiBaseUrl}/api/orders/${orderId}`, {
-                    credentials: 'include',
-                    headers: { 'Authorization': `Bearer ${getCookie('AuthToken')}` }
+                    credentials: 'include'
                 });
 
                 if (response.ok) {
@@ -270,8 +273,8 @@
         }
 
         async function updateOrderStatus(orderId, newStatus) {
-            if (newStatus < 0 || newStatus > 4) {
-                alert('Cannot update status further');
+            if (newStatus !== 3 && newStatus !== 4) {
+                alert('Orders can only be advanced after payment is confirmed.');
                 return;
             }
 
@@ -279,7 +282,10 @@
                 const response = await fetch(`${apiBaseUrl}/api/orders/${orderId}/status`, {
                     method: 'PUT',
                     credentials: 'include',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': document.querySelector('meta[name="csrf-token"]')?.content ?? ''
+                    },
                     body: JSON.stringify({ status: newStatus })
                 });
 
@@ -310,7 +316,7 @@
             }
 
             if (status) {
-                filtered = filtered.filter(o => o.status === parseInt(status));
+                filtered = filtered.filter(o => getStatusValue(o.status) === parseInt(status));
             }
 
             if (dateFilter) {
@@ -334,13 +340,6 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
-        }
-
-        function getCookie(name) {
-            const value = `; ${document.cookie}`;
-            const parts = value.split(`; ${name}=`);
-            if (parts.length === 2) return parts.pop().split(';').shift();
-            return null;
         }
 
         function showError(message) {

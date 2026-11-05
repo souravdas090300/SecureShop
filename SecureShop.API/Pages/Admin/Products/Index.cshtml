@@ -138,33 +138,44 @@ async function loadProducts() {
     </td></tr>`;
 
     try {
-        const response = await fetch(`${apiBaseUrl}/api/products?pageSize=1000`, {
-            headers: { 'Authorization': `Bearer ${getCookie('AuthToken')}` }
-        });
+        const pageSize = 50;
+        const products = [];
+        let page = 1;
+        let totalPages = 1;
 
-        if (!response.ok) {
-            showTableError(`Server returned ${response.status}`);
-            return;
+        while (page <= totalPages) {
+            const response = await fetch(
+                `${apiBaseUrl}/api/products?page=${page}&pageSize=${pageSize}`,
+                { credentials: 'include' });
+
+            if (!response.ok) {
+                showTableError(`Server returned ${response.status}`);
+                return;
+            }
+
+            const raw = await response.json();
+            if (Array.isArray(raw)) {
+                products.push(...raw);
+                break;
+            }
+
+            const pageItems = raw?.items ?? raw?.data ?? raw?.products;
+            if (!Array.isArray(pageItems)) {
+                console.warn('Unexpected API shape:', raw);
+                break;
+            }
+
+            products.push(...pageItems);
+            const reportedTotalPages = Number(raw.totalPages);
+            if (!Number.isSafeInteger(reportedTotalPages) || reportedTotalPages < 1) {
+                break;
+            }
+
+            totalPages = reportedTotalPages;
+            page++;
         }
 
-        const raw = await response.json();
-
-        if (Array.isArray(raw)) {
-            allProducts = raw;
-        } else if (raw && Array.isArray(raw.items)) {
-            allProducts = raw.items;
-        } else if (raw && Array.isArray(raw.data)) {
-            allProducts = raw.data;
-        } else if (raw && Array.isArray(raw.products)) {
-            allProducts = raw.products;
-        } else if (raw && typeof raw === 'object') {
-            const arrProp = Object.values(raw).find(v => Array.isArray(v));
-            allProducts = arrProp ?? [];
-            if (!arrProp) console.warn('Unexpected API shape:', raw);
-        } else {
-            allProducts = [];
-        }
-
+        allProducts = products;
         console.log(`Loaded ${allProducts.length} products`);
         renderProducts(allProducts);
 
@@ -305,7 +316,10 @@ async function deleteProduct() {
     try {
         const response = await fetch(`${apiBaseUrl}/api/products/${deleteProductId}`, {
             method: 'DELETE',
-            headers: { 'Authorization': `Bearer ${getCookie('AuthToken')}` }
+            credentials: 'include',
+            headers: {
+                'RequestVerificationToken': document.querySelector('meta[name="csrf-token"]')?.content ?? ''
+            }
         });
 
         bootstrap.Modal.getInstance(document.getElementById('deleteModal'))?.hide();
@@ -332,13 +346,6 @@ function escapeHtml(text) {
     const d = document.createElement('div');
     d.textContent = String(text);
     return d.innerHTML;
-}
-
-function getCookie(name) {
-    const v = `; ${document.cookie}`;
-    const p = v.split(`; ${name}=`);
-    if (p.length === 2) return p.pop().split(';').shift();
-    return null;
 }
 
 function showTableError(message) {

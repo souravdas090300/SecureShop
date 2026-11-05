@@ -89,7 +89,7 @@
             <div class="stat-card">
                 <div class="d-flex justify-content-between align-items-start">
                     <div class="flex-grow-1">
-                        <p class="text-muted mb-2 fw-500" style="font-size: 0.875rem;">Pending Orders</p>
+                        <p class="text-muted mb-2 fw-500" style="font-size: 0.875rem;">Awaiting Payment</p>
                         <h3 class="mb-2 fw-bold" id="pendingOrders" style="color: #1e293b;">--</h3>
                         <div class="d-flex align-items-center">
                             <span class="badge bg-warning bg-opacity-10 text-warning">
@@ -219,11 +219,12 @@
         async function loadDashboardStats() {
             try {
                 // Load products count
-                const productsResponse = await fetch(`${apiBaseUrl}/api/products?pageSize=1000`);
+                const productsResponse = await fetch(`${apiBaseUrl}/api/products?pageSize=50`);
                 if (productsResponse.ok) {
                     const data = await productsResponse.json();
                     const products = Array.isArray(data) ? data : (data.items ?? data.data ?? []);
-                    document.getElementById('totalProducts').textContent = products.length;
+                    document.getElementById('totalProducts').textContent =
+                        Number.isSafeInteger(data.totalCount) ? data.totalCount : products.length;
                 }
 
                 // Load orders count
@@ -236,12 +237,12 @@
                     document.getElementById('totalOrders').textContent = orders.length;
                     
                     // Calculate pending orders
-                    const pending = orders.filter(o => o.status === 'Pending' || o.status === 0).length;
+                    const pending = orders.filter(o => [0, 1].includes(getStatusValue(o.status))).length;
                     document.getElementById('pendingOrders').textContent = pending;
                     
                     // Calculate total revenue
                     const revenue = orders
-                        .filter(o => o.status === 'Completed' || o.status === 3)
+                        .filter(o => [2, 3, 4].includes(getStatusValue(o.status)))
                         .reduce((sum, o) => sum + (o.totalAmount ?? 0), 0);
                     document.getElementById('totalRevenue').textContent = '$' + revenue.toFixed(2);
                     
@@ -311,28 +312,21 @@
         function getStatusBadge(status) {
             const statusMap = {
                 0: { label: 'Pending', class: 'warning', icon: 'clock' },
-                1: { label: 'Processing', class: 'info', icon: 'cog' },
-                2: { label: 'Shipped', class: 'primary', icon: 'truck' },
-                3: { label: 'Completed', class: 'success', icon: 'check-circle' },
-                4: { label: 'Cancelled', class: 'danger', icon: 'times-circle' },
-                'Pending': { label: 'Pending', class: 'warning', icon: 'clock' },
-                'Processing': { label: 'Processing', class: 'info', icon: 'cog' },
-                'Shipped': { label: 'Shipped', class: 'primary', icon: 'truck' },
-                'Completed': { label: 'Completed', class: 'success', icon: 'check-circle' },
-                'Cancelled': { label: 'Cancelled', class: 'danger', icon: 'times-circle' }
+                1: { label: 'Payment processing', class: 'info', icon: 'credit-card' },
+                2: { label: 'Paid', class: 'success', icon: 'check-circle' },
+                3: { label: 'Shipped', class: 'primary', icon: 'truck' },
+                4: { label: 'Delivered', class: 'success', icon: 'check-circle' },
+                5: { label: 'Cancelled', class: 'danger', icon: 'times-circle' }
             };
-            
-            const statusInfo = statusMap[status] || { label: 'Unknown', class: 'secondary', icon: 'question' };
+            const statusInfo = statusMap[getStatusValue(status)] || { label: 'Unknown', class: 'secondary', icon: 'question' };
             return `<span class="badge bg-${statusInfo.class} bg-opacity-10 text-${statusInfo.class}" style="padding: 0.5rem 0.75rem; font-weight: 500; border-radius: 6px;">
                         <i class="fas fa-${statusInfo.icon} me-1"></i>${statusInfo.label}
                     </span>`;
         }
 
-        function getCookie(name) {
-            const value = `; ${document.cookie}`;
-            const parts = value.split(`; ${name}=`);
-            if (parts.length === 2) return parts.pop().split(';').shift();
-            return null;
+        function getStatusValue(status) {
+            const names = { Pending: 0, PaymentProcessing: 1, Processing: 1, Paid: 2, Shipped: 3, Delivered: 4, Completed: 4, Cancelled: 5 };
+            return typeof status === 'string' ? names[status] : status;
         }
 
         async function seedProducts() {
@@ -341,9 +335,11 @@
             btn.innerHTML = '<div class="mb-3" style="font-size:2.5rem;"><i class="fas fa-spinner fa-spin"></i></div><div class="fw-semibold">Seeding...</div>';
             try {
                 const res = await fetch(`${apiBaseUrl}/api/admin/seed`, {
-                    method: 'GET',
+                    method: 'POST',
                     credentials: 'include',
-                    headers: { 'Authorization': `Bearer ${getCookie('AuthToken')}` }
+                    headers: {
+                        'RequestVerificationToken': document.querySelector('meta[name="csrf-token"]')?.content ?? ''
+                    }
                 });
                 const data = await res.json();
                 if (res.ok) {
