@@ -102,7 +102,7 @@ public class CartModelTests
             l => l.Log(
                 LogLevel.Information,
                 It.IsAny<EventId>(),
-                It.Is<It.IsAnyType>((v, _) => v.ToString()!.Contains("Cart")),
+                It.Is<It.IsAnyType>((v, _) => v != null && v.ToString()!.Contains("Cart")),
                 null,
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once);

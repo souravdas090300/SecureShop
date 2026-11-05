@@ -1,6 +1,6 @@
 # SecureShop
 
-An e-commerce application built with **ASP.NET Core 8**, following Clean Architecture principles and deployed on **Railway**. Public production readiness is still gated; see [Known limitations and pre-deployment blockers](#known-limitations-and-pre-deployment-blockers).
+An e-commerce application built with **ASP.NET Core 10**, following Clean Architecture principles and deployed on **Railway**. Public production readiness is still gated; see [Known limitations and pre-deployment blockers](#known-limitations-and-pre-deployment-blockers).
 
 The application ships a full customer-facing storefront (Razor Pages), a separate admin panel, and a RESTful JSON API — all in a single host process.
 
@@ -57,8 +57,8 @@ SecureShop follows **Clean Architecture** — dependencies only point inward:
 
 | Concern | Technology |
 |---|---|
-| Framework | ASP.NET Core 8 (Razor Pages + Web API) |
-| Database | PostgreSQL via [Neon](https://neon.tech) (EF Core 8 + Npgsql) |
+| Framework | ASP.NET Core 10 (Razor Pages + Web API) |
+| Database | PostgreSQL via [Neon](https://neon.tech) (EF Core 10 + Npgsql) |
 | Cache | Redis via [Upstash](https://upstash.com) (StackExchange.Redis) |
 | Auth (customers) | ASP.NET Core Identity + JWT Bearer + Cookie |
 | Auth (admin) | ASP.NET Core Identity + `AdminCookie` scheme |
@@ -248,7 +248,7 @@ Create order request:
 }
 ```
 
-For a successful `POST /api/orders`, `stripePaymentIntentId` is the Stripe PaymentIntent ID. `paymentClientSecret` is returned for the checkout page to confirm the payment with Stripe.js; it is not stored as the order's payment ID. The order remains unpaid until the signed webhook confirms it. Stripe.net 50.4.1 expects webhook API version `2026-02-25.clover`.
+For a successful `POST /api/orders`, `stripePaymentIntentId` is the Stripe PaymentIntent ID. `paymentClientSecret` is returned for the checkout page to confirm the payment with Stripe.js; it is not stored as the order's payment ID. The order remains unpaid until the signed webhook confirms it. Stripe.net 53.1.0 expects webhook API version `2026-10-28.endive` — set the webhook endpoint's API version accordingly in the Stripe dashboard.
 
 ### Payment lifecycle
 
@@ -288,7 +288,7 @@ Admin login is at `/admin/login`. Only users with the `Admin` role can log in. N
 
 ### Prerequisites
 
-- [.NET 8 SDK](https://dotnet.microsoft.com/download)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - PostgreSQL (or a [Neon](https://neon.tech) free-tier database)
 - Redis — **optional**. Without it the app uses an in-memory no-op cache (data always comes from the DB; performance is lower but everything works).
 
@@ -399,10 +399,10 @@ Set these in the Railway service dashboard (use `__` as the section separator):
 - **Checkout details are not persisted.** Contact and shipping fields are shown in the front end but are not included in the order request or saved with the order.
 - **Email delivery needs a TLS fix and provider testing** before password-reset email can be relied on.
 - **`/health` is liveness-only** and does not check PostgreSQL or migration readiness.
-- **Runtime support needs attention.** This project targets .NET 8; the blocker review records its support end date as November 10, 2026. Upgrade and validate against a supported runtime.
+- **Runtime** — targets .NET 10 LTS (supported through November 2028).
 - **External and deployment validation remains open.** The automated suite does not establish live Stripe behavior, provider integrations, production database readiness, or an HTTPS deployment smoke test.
 
-The latest Release build passed with `/warnaserror` and 0 warnings/errors; **376 tests passed** (362 unit, 14 integration). Integration tests run against real PostgreSQL, including payment-lifecycle scenarios (duplicate/parallel webhook deliveries, failed payments, paid-order cancellation, late-payment refunds, and the abandonment sweep). Stripe signature and order-confirmation tests are local unit tests, not a live Stripe transaction. Production approval requires resolving the items above and validating the target environment; see [docs/pre-deployment-blockers.md](./docs/pre-deployment-blockers.md).
+The latest Release build passed with `/warnaserror` and 0 warnings/errors; **379 tests passed** (363 unit, 16 integration). Integration tests run against real PostgreSQL, including payment-lifecycle scenarios (duplicate/parallel webhook deliveries, failed payments, paid-order cancellation, late-payment refunds, and the abandonment sweep). Stripe signature and order-confirmation tests are local unit tests, not a live Stripe transaction. Production approval requires resolving the items above and validating the target environment; see [docs/pre-deployment-blockers.md](./docs/pre-deployment-blockers.md).
 
 ---
 
@@ -432,12 +432,12 @@ The latest Release build passed with `/warnaserror` and 0 warnings/errors; **376
 dotnet test
 ```
 
-**376 test cases pass** — 362 unit tests and 14 integration tests. The integration tests verify `/health`, production authentication-cookie settings, production Swagger unavailability, Stripe CSP directives, invalid product pagination, authentication debug pages in Production, atomic stock reservation under concurrency, and the Stripe payment lifecycle (webhook idempotency, failed/cancelled/succeeded transitions, late-payment refunds, abandonment sweep) against real PostgreSQL. The Release build passes with `/warnaserror`, and the current transitive NuGet vulnerability scan reports no vulnerable packages.
+**379 test cases pass** — 363 unit tests and 16 integration tests. The integration tests verify `/health`, production authentication-cookie settings, production Swagger unavailability, Stripe CSP directives, invalid product pagination, authentication debug pages in Production, atomic stock reservation under concurrency, and the Stripe payment lifecycle (webhook idempotency, failed/cancelled/succeeded transitions, late-payment refunds, abandonment sweep) against real PostgreSQL. The Release build passes with `/warnaserror`, and the current transitive NuGet vulnerability scan reports no vulnerable packages.
 
 | Project | Count | Coverage areas |
 |---------|-------|----------------|
-| `SecureShop.UnitTests` | 362 | Domain entities, account lockout, pagination bounds, Stripe payment/webhook behavior including lifecycle branches, controllers, middleware, antiforgery handling, validators, and Razor Page models |
-| `SecureShop.IntegrationTests` | 14 | `/health`, production authentication-cookie settings, Swagger unavailability, CSP directives, pagination response, stock-reservation concurrency, and Stripe payment lifecycle scenarios against real PostgreSQL |
+| `SecureShop.UnitTests` | 363 | Domain entities, account lockout, pagination bounds, Stripe payment/webhook behavior including lifecycle branches, controllers, middleware, antiforgery handling, validators, and Razor Page models |
+| `SecureShop.IntegrationTests` | 16 | `/health`, production authentication-cookie settings, Swagger unavailability, CSP directives, pagination response, stock-reservation concurrency, and Stripe payment lifecycle scenarios against real PostgreSQL |
 
 ---
 
