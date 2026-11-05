@@ -29,6 +29,10 @@ public class AuthServiceTests
         var store = new Mock<IUserStore<ApplicationUser>>();
         var um    = new Mock<UserManager<ApplicationUser>>(
             store.Object, null!, null!, null!, null!, null!, null!, null!, null!);
+        um.Setup(u => u.GetLockoutEnabledAsync(It.IsAny<ApplicationUser>())).ReturnsAsync(true);
+        um.Setup(u => u.IsLockedOutAsync(It.IsAny<ApplicationUser>())).ReturnsAsync(false);
+        um.Setup(u => u.AccessFailedAsync(It.IsAny<ApplicationUser>())).ReturnsAsync(IdentityResult.Success);
+        um.Setup(u => u.ResetAccessFailedCountAsync(It.IsAny<ApplicationUser>())).ReturnsAsync(IdentityResult.Success);
 
         var roleStore = new Mock<IRoleStore<IdentityRole>>();
         var rm        = new Mock<RoleManager<IdentityRole>>(
@@ -93,6 +97,9 @@ public class AuthServiceTests
         result.Should().NotBeNull();
         result.Token.Should().NotBeNullOrEmpty();
         result.Email.Should().Be("new@test.com");
+        um.Verify(u => u.CreateAsync(
+            It.Is<ApplicationUser>(createdUser => createdUser.LockoutEnabled),
+            It.IsAny<string>()), Times.Once);
         rm.Verify(r => r.CreateAsync(It.IsAny<IdentityRole>()), Times.Once);
     }
 
@@ -151,6 +158,21 @@ public class AuthServiceTests
         var act = () => svc.LoginAsync(new LoginDto("user@test.com", "WrongPass!"));
 
         await act.Should().ThrowAsync<DomainException>().WithMessage("*credentials*");
+        um.Verify(u => u.AccessFailedAsync(user), Times.Once);
+    }
+
+    [Fact]
+    public async Task LoginAsync_LockedOutUser_DoesNotCheckPassword()
+    {
+        var (um, _, svc) = Create();
+        var user = new ApplicationUser { Id = "u1", Email = "user@test.com", FirstName = "U", LastName = "S" };
+        um.Setup(u => u.FindByEmailAsync("user@test.com")).ReturnsAsync(user);
+        um.Setup(u => u.IsLockedOutAsync(user)).ReturnsAsync(true);
+
+        var act = () => svc.LoginAsync(new LoginDto("user@test.com", "Correct123!"));
+
+        await act.Should().ThrowAsync<DomainException>().WithMessage("*credentials*");
+        um.Verify(u => u.CheckPasswordAsync(It.IsAny<ApplicationUser>(), It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
@@ -168,6 +190,7 @@ public class AuthServiceTests
         result.Token.Should().NotBeNullOrEmpty();
         result.Email.Should().Be("user@test.com");
         result.FirstName.Should().Be("U");
+        um.Verify(u => u.ResetAccessFailedCountAsync(user), Times.Once);
     }
 
     [Fact]

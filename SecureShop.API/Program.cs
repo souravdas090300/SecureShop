@@ -2,10 +2,12 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -14,6 +16,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
 using SecureShop.API.Middleware;
+using SecureShop.API.Helpers;
 using SecureShop.Application;
 using SecureShop.Domain.Entities;
 using SecureShop.Infrastructure;
@@ -67,6 +70,11 @@ builder.Services.AddHealthChecks();
 // ── Authentication: Cookies for Razor Pages, JWT for API ─────────────────────
 var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? throw new InvalidOperationException("Jwt:Secret is not configured. Set it in Railway environment variables.");
+var bootstrapAdminCredentials = BootstrapAdminProvisioner.GetCredentials(builder.Configuration);
+
+var cookieSecurePolicy = builder.Environment.IsDevelopment()
+    ? CookieSecurePolicy.SameAsRequest
+    : CookieSecurePolicy.Always;
 
 builder.Services.AddAuthentication(options =>
     {
@@ -84,27 +92,9 @@ builder.Services.AddAuthentication(options =>
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
         options.SlidingExpiration = true;
         options.Cookie.HttpOnly = true;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.Cookie.SecurePolicy = cookieSecurePolicy;
         options.Cookie.SameSite = SameSiteMode.Lax;
         options.Cookie.IsEssential = true;
-        options.Events = new CookieAuthenticationEvents
-        {
-            OnSigningIn = context =>
-            {
-                Console.WriteLine($"[UserAuth] OnSigningIn - Principal: {context.Principal?.Identity?.Name}");
-                return Task.CompletedTask;
-            },
-            OnSignedIn = context =>
-            {
-                Console.WriteLine($"[UserAuth] OnSignedIn - User signed in successfully");
-                return Task.CompletedTask;
-            },
-            OnValidatePrincipal = context =>
-            {
-                Console.WriteLine($"[UserAuth] OnValidatePrincipal - IsAuthenticated: {context.Principal?.Identity?.IsAuthenticated}, Name: {context.Principal?.Identity?.Name}");
-                return Task.CompletedTask;
-            }
-        };
     })
     .AddCookie("AdminCookie", options =>
     {
@@ -115,32 +105,18 @@ builder.Services.AddAuthentication(options =>
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
         options.SlidingExpiration = true;
         options.Cookie.HttpOnly = true;
-        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.Cookie.SecurePolicy = cookieSecurePolicy;
         options.Cookie.SameSite = SameSiteMode.Lax;
         options.Cookie.IsEssential = true;
         options.Events = new CookieAuthenticationEvents
         {
-            OnSigningIn = context =>
-            {
-                Console.WriteLine($"[AdminAuth] OnSigningIn - Principal: {context.Principal?.Identity?.Name}");
-                return Task.CompletedTask;
-            },
-            OnSignedIn = context =>
-            {
-                Console.WriteLine($"[AdminAuth] OnSignedIn - Admin signed in successfully");
-                return Task.CompletedTask;
-            },
             OnValidatePrincipal = context =>
             {
-                Console.WriteLine($"[AdminAuth] OnValidatePrincipal - IsAuthenticated: {context.Principal?.Identity?.IsAuthenticated}, Name: {context.Principal?.Identity?.Name}");
-                
-                // Validate that the user still has Admin role
                 if (context.Principal?.Identity?.IsAuthenticated == true)
                 {
                     var isAdmin = context.Principal.IsInRole("Admin");
                     if (!isAdmin)
                     {
-                        Console.WriteLine($"[AdminAuth] User no longer has Admin role - rejecting principal");
                         context.RejectPrincipal();
                     }
                 }
@@ -191,19 +167,27 @@ builder.Services.AddAuthorization(options =>
 // README: 100 req/min API, 10 req/min auth
 builder.Services.AddRateLimiter(options =>
 {
-    options.AddFixedWindowLimiter("api", opt =>
-    {
-        opt.PermitLimit          = 100;
-        opt.Window               = TimeSpan.FromMinutes(1);
-        opt.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-        opt.QueueLimit           = 5;
-    });
-    options.AddFixedWindowLimiter("auth", opt =>
-    {
-        opt.PermitLimit = 10;
-        opt.Window      = TimeSpan.FromMinutes(1);
-        opt.QueueLimit  = 0;
-    });
+    options.AddPolicy("api", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 100,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 5,
+                AutoReplenishment = true
+            }));
+    options.AddPolicy("auth", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
     options.RejectionStatusCode = 429;
 });
 
@@ -219,11 +203,14 @@ builder.Services.AddCors(options =>
 });
 
 // ── Controllers + Swagger ─────────────────────────────────────────────────────
-builder.Services.AddControllers()
+builder.Services.AddControllers(options =>
+    options.Filters.AddService<AdminCookieAntiforgeryFilter>())
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
     });
+builder.Services.AddAntiforgery(options => options.HeaderName = "RequestVerificationToken");
+builder.Services.AddScoped<AdminCookieAntiforgeryFilter>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -285,6 +272,22 @@ var app = builder.Build();
 
 // ── Middleware pipeline (ORDER MATTERS) ───────────────────────────────────────
 
+// 0. Forwarded headers — Railway terminates TLS at its proxy and forwards
+//    X-Forwarded-* headers. Must run before rate limiting (which partitions
+//    by RemoteIpAddress) and authentication so scheme/host/client IP are real.
+var forwardedHeadersOptions = new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor
+                     | ForwardedHeaders.XForwardedProto
+                     | ForwardedHeaders.XForwardedHost
+};
+// Railway's proxy is not loopback, so the default trust lists (loopback only)
+// must be cleared or the headers are silently ignored. Known consequence: any
+// client can spoof X-Forwarded-For — acceptable behind Railway's edge.
+forwardedHeadersOptions.KnownNetworks.Clear();
+forwardedHeadersOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeadersOptions);
+
 // 1. Security headers — outermost so every response gets them
 app.UseMiddleware<SecurityHeadersMiddleware>();
 
@@ -294,19 +297,19 @@ app.UseMiddleware<GlobalExceptionMiddleware>();
 // 3. Cache-busting headers for dynamic pages
 app.UseMiddleware<CacheBustingMiddleware>();
 
-// 3. Swagger — Enable in all environments for Railway
-app.UseSwagger();
-app.UseSwaggerUI(c =>
+// 3. Swagger is available only in Development.
+if (app.Environment.IsDevelopment())
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "SecureShop API v1");
-    c.RoutePrefix  = "swagger";
-    c.DocumentTitle = "SecureShop API Docs";
-    if (app.Environment.IsDevelopment())
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
     {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "SecureShop API v1");
+        c.RoutePrefix = "swagger";
+        c.DocumentTitle = "SecureShop API Docs";
         c.InjectStylesheet("/swagger-ui/custom.css");
-    }
-    c.EnableDeepLinking();
-});
+        c.EnableDeepLinking();
+    });
+}
 
 // 4. Static files (serves /swagger-ui/custom.css etc.)
 app.UseStaticFiles();
@@ -340,7 +343,7 @@ app.UseAuthorization();
 
 // ── Endpoints ─────────────────────────────────────────────────────────────────
 // Map API controllers under /api prefix
-app.MapControllers();
+app.MapControllers().RequireRateLimiting("api");
 
 // Map Razor Pages for frontend website
 app.MapRazorPages();
@@ -359,11 +362,23 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 // Convenience redirect: /api/swagger → /swagger
 app.MapGet("/api/swagger", () => Results.Redirect("/swagger"));
 
-// ── One-shot product seed endpoint (Admin JWT required) ──────────────────────
+// ── One-shot product seed endpoint (Admin session required) ──────────────────────
 // Call GET /api/admin/seed with a valid Admin Bearer token to populate samples.
 // Only inserts when the Products table is empty; safe to call multiple times.
-app.MapGet("/api/admin/seed", async (AppDbContext db) =>
+app.MapPost("/api/admin/seed", async (
+    HttpContext context,
+    IAntiforgery antiforgery,
+    AppDbContext db) =>
 {
+    try
+    {
+        await antiforgery.ValidateRequestAsync(context);
+    }
+    catch (AntiforgeryValidationException)
+    {
+        return Results.BadRequest(new { message = "The request could not be validated." });
+    }
+
     try
     {
         var count = await db.Set<SecureShop.Domain.Entities.Product>().CountAsync();
@@ -476,37 +491,12 @@ _ = Task.Run(async () =>
 
         Log.Information("Startup init: role seeding completed");
 
-        // Seed default admin user if none exists
         var userManager = scope.ServiceProvider
             .GetRequiredService<UserManager<ApplicationUser>>();
-        
-        var adminEmail = "admin@secureshop.com";
-        var adminUser = await userManager.FindByEmailAsync(adminEmail);
-        
-        if (adminUser == null)
-        {
-            adminUser = new ApplicationUser
-            {
-                UserName = adminEmail,
-                Email = adminEmail,
-                FirstName = "Admin",
-                LastName = "User",
-                EmailConfirmed = true
-            };
-            
-            var result = await userManager.CreateAsync(adminUser, "Admin123!@#");
-            
-            if (result.Succeeded)
-            {
-                await userManager.AddToRoleAsync(adminUser, "Admin");
-                Log.Information("Startup init: created default admin user (admin@secureshop.com / Admin123!@#)");
-            }
-            else
-            {
-                Log.Warning("Startup init: failed to create admin user: {Errors}", 
-                    string.Join(", ", result.Errors.Select(e => e.Description)));
-            }
-        }
+        await BootstrapAdminProvisioner.ProvisionIfNeededAsync(
+            userManager,
+            bootstrapAdminCredentials,
+            app.Logger);
 
     }
     catch (Exception ex)
@@ -553,3 +543,5 @@ _ = Task.Run(async () =>
 });
 
 app.Run();
+
+public partial class Program { }
