@@ -70,3 +70,6 @@ out/
 # Data Protection key ring artifacts (keys live in PostgreSQL)
 App_Data/
 SecureShop.API/App_Data/
+
+# C# Dev Kit / language-service caches (regenerated automatically)
+*.lscache
