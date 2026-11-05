@@ -59,6 +59,7 @@ appsettings.Production.json
 appsettings.*.json
 .env
 .env.*
+!.env.example
 SecureShop.API/appsettings.Local.json
 
 # Nixpacks generated cache — never commit
