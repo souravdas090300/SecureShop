@@ -92,11 +92,14 @@ public class OrderAbandonmentService : BackgroundService
                 switch (state)
                 {
                     case PaymentIntentState.Succeeded:
-                        // Payment went through — leave it for the succeeded webhook
-                        // to mark Paid. Do not cancel or restore stock.
+                    case PaymentIntentState.Processing:
+                        // Succeeded: payment went through — leave it for the
+                        // succeeded webhook to mark Paid. Processing: Stripe
+                        // cannot cancel an in-flight intent — skip until a later
+                        // sweep resolves it to a terminal state.
                         _logger.LogInformation(
-                            "Order {OrderId}: intent {PaymentIntentId} already succeeded; skipping abandonment",
-                            order.Id, intentId);
+                            "Order {OrderId}: intent {PaymentIntentId} is {State}; skipping abandonment",
+                            order.Id, intentId, state);
                         break;
 
                     case PaymentIntentState.Canceled:

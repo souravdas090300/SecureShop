@@ -21,6 +21,9 @@ public class FakePaymentService : IPaymentService
     /// <summary>Intent IDs that should make <see cref="GetPaymentIntentStatusAsync"/> throw (Stripe outage simulation).</summary>
     public HashSet<string> FailingIntents { get; } = new();
 
+    /// <summary>Intent IDs that should make <see cref="RefundPaymentIntentAsync"/> throw (refund failure simulation).</summary>
+    public HashSet<string> FailingRefunds { get; } = new();
+
     /// <summary>
     /// Programs the state reported by <see cref="GetPaymentIntentStatusAsync"/>
     /// for an intent. Defaults to <see cref="PaymentIntentState.RequiresPaymentMethod"/>.
@@ -55,6 +58,8 @@ public class FakePaymentService : IPaymentService
     /// <inheritdoc />
     public Task<string> RefundPaymentIntentAsync(string paymentIntentId, string idempotencyKey)
     {
+        if (FailingRefunds.Contains(paymentIntentId))
+            throw new InvalidOperationException($"Simulated refund failure for {paymentIntentId}");
         Refunds.Add((paymentIntentId, idempotencyKey));
         return Task.FromResult($"re_test_{Guid.NewGuid():N}");
     }

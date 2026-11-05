@@ -259,6 +259,66 @@ public class StripePaymentLifecycleTests
     }
 
     [Fact]
+    public async Task PaymentFailed_AfterSucceeded_DoesNotTouchPaidOrder()
+    {
+        await using var factory = await StartFactoryAsync();
+        var (productId, userId) = await SeedCatalogAsync(factory, stock: 10);
+        var (orderId, intentId, amountCents) = await CreateOrderAsync(factory, productId, userId, quantity: 2);
+
+        await ProcessEventAsync(factory, $"evt_{Guid.NewGuid():N}", "payment_intent.succeeded", intentId, amountCents, amountCents);
+        // Out-of-order delivery: the failure event arrives after the success.
+        await ProcessEventAsync(factory, $"evt_{Guid.NewGuid():N}", "payment_intent.payment_failed", intentId,
+            failureCode: "card_declined");
+
+        var state = await GetOrderStateAsync(factory, orderId);
+        Assert.Equal(OrderStatus.Paid, state.Status);
+        Assert.Null(state.FailureCode);
+        Assert.Equal(8, await GetStockAsync(factory, productId));
+    }
+
+    [Fact]
+    public async Task SucceededEvent_RefundFailure_RollsBackEventClaimForRetry()
+    {
+        await using var factory = await StartFactoryAsync();
+        var (productId, userId) = await SeedCatalogAsync(factory, stock: 10);
+        var (orderId, intentId, amountCents) = await CreateOrderAsync(factory, productId, userId, quantity: 2);
+
+        await ProcessEventAsync(factory, $"evt_{Guid.NewGuid():N}", "payment_intent.canceled", intentId);
+
+        var fake = factory.Services.GetRequiredService<FakePaymentService>();
+        fake.FailingRefunds.Add(intentId);
+
+        var evtId = $"evt_{Guid.NewGuid():N}";
+        // The refund throws inside the event transaction → the whole unit
+        // (including the ProcessedStripeEvents claim) rolls back and the
+        // exception propagates so the endpoint returns 5xx and Stripe retries.
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            ProcessEventAsync(factory, evtId, "payment_intent.succeeded", intentId, amountCents, amountCents));
+
+        Assert.False(await EventRecordedAsync(factory, evtId), "failed event must not be recorded as processed");
+        var state = await GetOrderStateAsync(factory, orderId);
+        Assert.Equal(OrderStatus.Cancelled, state.Status);
+        Assert.Null(state.RefundId);
+
+        // Stripe redelivers the same event once the refund path recovers —
+        // the idempotency key makes the retry safe.
+        fake.FailingRefunds.Remove(intentId);
+        await ProcessEventAsync(factory, evtId, "payment_intent.succeeded", intentId, amountCents, amountCents);
+
+        state = await GetOrderStateAsync(factory, orderId);
+        Assert.Equal(OrderStatus.Cancelled, state.Status);
+        Assert.NotNull(state.RefundId);
+        Assert.True(await EventRecordedAsync(factory, evtId));
+    }
+
+    private static async Task<bool> EventRecordedAsync(WebApplicationFactory<Program> factory, string eventId)
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        return await db.ProcessedStripeEvents.AnyAsync(e => e.EventId == eventId);
+    }
+
+    [Fact]
     public async Task SucceededEvent_MarksPaymentProcessingOrderPaid()
     {
         await using var factory = await StartFactoryAsync();
@@ -300,6 +360,13 @@ public class StripePaymentLifecycleTests
         factory.Services.GetRequiredService<FakePaymentService>()
             .SetIntentState(staleStripeCanceled.IntentId, PaymentIntentState.Canceled);
 
+        // staleProcessing: intent mid-flight at Stripe — cannot be cancelled,
+        // so the sweep must skip it rather than erroring every interval
+        var staleProcessing = await CreateOrderAsync(factory, productId, userId, quantity: 1);
+        await BackdateOrderAsync(factory, staleProcessing.OrderId, TimeSpan.FromHours(2));
+        factory.Services.GetRequiredService<FakePaymentService>()
+            .SetIntentState(staleProcessing.IntentId, PaymentIntentState.Processing);
+
         // staleFailing: Stripe status lookup throws → left alone for next sweep
         var staleFailing = await CreateOrderAsync(factory, productId, userId, quantity: 1);
         await BackdateOrderAsync(factory, staleFailing.OrderId, TimeSpan.FromHours(2));
@@ -323,16 +390,18 @@ public class StripePaymentLifecycleTests
         Assert.Equal(OrderStatus.Cancelled, (await GetOrderStateAsync(factory, staleCancel.OrderId)).Status);
         Assert.Equal(OrderStatus.PaymentProcessing, (await GetOrderStateAsync(factory, fresh.OrderId)).Status);
         Assert.Equal(OrderStatus.PaymentProcessing, (await GetOrderStateAsync(factory, staleSucceeded.OrderId)).Status);
+        Assert.Equal(OrderStatus.PaymentProcessing, (await GetOrderStateAsync(factory, staleProcessing.OrderId)).Status);
         Assert.Equal(OrderStatus.Cancelled, (await GetOrderStateAsync(factory, staleStripeCanceled.OrderId)).Status);
         Assert.Equal(OrderStatus.PaymentProcessing, (await GetOrderStateAsync(factory, staleFailing.OrderId)).Status);
 
-        // Stock: 10 - 5 reserved = 5; staleCancel + staleStripeCanceled restored → 7.
-        Assert.Equal(7, await GetStockAsync(factory, productId));
+        // Stock: 10 - 6 reserved = 4; staleCancel + staleStripeCanceled restored → 6.
+        Assert.Equal(6, await GetStockAsync(factory, productId));
 
         var fake = factory.Services.GetRequiredService<FakePaymentService>();
         Assert.Contains(staleCancel.IntentId, fake.CancelledIntents);
         Assert.DoesNotContain(staleStripeCanceled.IntentId, fake.CancelledIntents); // already canceled at Stripe
         Assert.DoesNotContain(staleSucceeded.IntentId, fake.CancelledIntents);
+        Assert.DoesNotContain(staleProcessing.IntentId, fake.CancelledIntents);
         Assert.DoesNotContain(staleFailing.IntentId, fake.CancelledIntents);
     }
 }

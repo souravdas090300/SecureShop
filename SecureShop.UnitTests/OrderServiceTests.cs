@@ -440,4 +440,25 @@ public class OrderServiceTests
         order.Status.Should().Be(OrderStatus.PaymentProcessing); // never marked Paid
         _payment.Verify(p => p.RefundPaymentIntentAsync("pi_late", $"secure-shop-refund-{order.Id}"), Times.Once);
     }
+
+    [Fact]
+    public async Task ProcessStripeEventAsync_PaymentFailedForPaidOrder_DoesNotWriteFailureFields()
+    {
+        // Stripe does not guarantee event ordering — a payment_failed delivered
+        // after succeeded must not stamp failure fields onto a Paid order.
+        SetupTransactionPassthrough();
+        SetupEventClaim("evt_fail_late", firstDelivery: true);
+        var order = MakeOrder();
+        order.SetPaymentIntent("pi_paid_fail");
+        order.MarkAsPaid();
+        _orderRepo.Setup(r => r.GetByPaymentIntentIdAsync("pi_paid_fail", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(order);
+
+        await Svc().ProcessStripeEventAsync("evt_fail_late", "payment_intent.payment_failed", "pi_paid_fail", 0, 0, "usd", "card_declined");
+
+        order.LastPaymentFailureCode.Should().BeNull();
+        order.LastPaymentFailureAt.Should().BeNull();
+        order.Status.Should().Be(OrderStatus.Paid);
+        _orderRepo.Verify(r => r.UpdateAsync(It.IsAny<Order>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 }
