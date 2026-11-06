@@ -27,14 +27,13 @@ RUN dotnet publish SecureShop.API --no-restore --configuration Release --output 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
-# Non-root user for security
-RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
+# App_Data directory for any file-based keys/artifacts (DP keys are stored in
+# PostgreSQL; this is a fallback location). Owned by the runtime user.
+RUN mkdir -p /app/App_Data/DataProtection-Keys && chown -R $APP_UID /app/App_Data
 
-# Create App_Data directory with correct ownership before switching user
-RUN mkdir -p /app/App_Data/DataProtection-Keys \
-    && chown -R appuser:appgroup /app/App_Data
-
-USER appuser
+# The .NET 10 base image ships a built-in non-root user exposed as $APP_UID
+# (the image no longer provides addgroup/adduser).
+USER $APP_UID
 
 # Copy published output from build stage
 COPY --from=build /app/publish .

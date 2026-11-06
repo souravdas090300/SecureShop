@@ -40,3 +40,6 @@ jobs:
           # The concurrency test throws in CI if this is unset, so the job
           # fails rather than silently skipping.
           SECURESHOP_TEST_DATABASE_URL: Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=secureshop_test;SSL Mode=Disable
+
+      - name: Docker build
+        run: docker build -t secureshop:ci .
