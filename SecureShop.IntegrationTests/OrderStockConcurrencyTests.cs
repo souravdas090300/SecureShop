@@ -39,6 +39,10 @@ public class OrderStockConcurrencyTests
             return; // No test database configured — nothing to verify against.
         }
 
+        // Refuse production-looking targets before the host (and its startup
+        // migrations) ever connects.
+        SecureShop.Infrastructure.TestDatabaseGuard.EnsureSafeTestConnectionString(_connectionString);
+
         // appsettings.json ships "DefaultConnection": "" which would win over the
         // in-memory override below, so set the environment variable instead —
         // environment variables are loaded after appsettings.json. The variable

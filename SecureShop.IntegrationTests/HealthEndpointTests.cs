@@ -17,18 +17,32 @@ public class HealthEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 
     public HealthEndpointTests(WebApplicationFactory<Program> factory)
     {
-        _factory = factory.WithWebHostBuilder(builder =>
+        // appsettings.json ships an empty DefaultConnection that wins over
+        // in-memory config, so the Production DB guard needs the env var.
+        // Restored as soon as the host has consumed it.
+        var previous = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
+        Environment.SetEnvironmentVariable(
+            "ConnectionStrings__DefaultConnection",
+            "Host=unused.invalid;Database=x;Username=u;Password=p;SSL Mode=Require");
+        try
         {
-            builder.UseEnvironment(Environments.Production);
-            builder.ConfigureAppConfiguration((_, configuration) =>
-                configuration.AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["Jwt:Secret"] = "integration-test-secret-that-is-long-enough",
-                    ["Jwt:Issuer"] = "SecureShop.Tests",
-                    ["Jwt:Audience"] = "SecureShop.Tests"
-                }));
-        });
-        _client = _factory.CreateClient();
+            _factory = factory.WithWebHostBuilder(builder =>
+            {
+                builder.UseEnvironment(Environments.Production);
+                builder.ConfigureAppConfiguration((_, configuration) =>
+                    configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                    {
+                        ["Jwt:Secret"] = "integration-test-secret-that-is-long-enough",
+                        ["Jwt:Issuer"] = "SecureShop.Tests",
+                        ["Jwt:Audience"] = "SecureShop.Tests"
+                    }));
+            });
+            _client = _factory.CreateClient(); // force host build so the env var is consumed
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", previous);
+        }
     }
 
     [Fact]
@@ -76,11 +90,14 @@ public class HealthEndpointTests : IClassFixture<WebApplicationFactory<Program>>
     {
         var options = _factory.Services.GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>();
 
-        foreach (var scheme in new[] { CookieAuthenticationDefaults.AuthenticationScheme, "AdminCookie" })
-        {
-            var cookie = options.Get(scheme).Cookie;
-            Assert.Equal(CookieSecurePolicy.Always, cookie.SecurePolicy);
-            Assert.Equal(SameSiteMode.Lax, cookie.SameSite);
-        }
+        var userCookie = options.Get(CookieAuthenticationDefaults.AuthenticationScheme).Cookie;
+        Assert.Equal(CookieSecurePolicy.Always, userCookie.SecurePolicy);
+        Assert.Equal(SameSiteMode.Lax, userCookie.SameSite);
+
+        // Admin cookie is deliberately stricter: SameSite=Strict, Path=/admin.
+        var adminCookie = options.Get("AdminCookie").Cookie;
+        Assert.Equal(CookieSecurePolicy.Always, adminCookie.SecurePolicy);
+        Assert.Equal(SameSiteMode.Strict, adminCookie.SameSite);
+        Assert.Equal("/admin", adminCookie.Path);
     }
 }
