@@ -52,7 +52,7 @@ public class TestDatabaseGuardTests
     [InlineData("neondb")]
     [InlineData("secureshop")]
     [InlineData("secureshop_dev")]
-    [InlineData("ostra")]
+    [InlineData("production")]
     public void EnsureSafeTestConnectionString_DatabaseNotEndingInTest_Throws(string database)
     {
         var connStr = $"Host=ep-example.c-7.us-east-2.aws.neon.tech;Database={database};" +
