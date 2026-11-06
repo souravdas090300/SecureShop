@@ -70,6 +70,10 @@ if (dbStatus != DatabaseConnectionStatus.Ok)
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
+// Signals when startup migration/seeding finishes so DB-touching background
+// services (e.g. the abandonment sweep) wait for the schema to be ready.
+builder.Services.AddSingleton<SecureShop.API.Services.MigrationCompletedSignal>();
+
 // Abandoned-checkout sweeper: cancels stale PaymentProcessing orders and
 // restores their stock (interval/age configurable via Orders:* settings).
 builder.Services.AddHostedService<SecureShop.API.Services.OrderAbandonmentService>();
@@ -566,6 +570,11 @@ _ = Task.Run(async () =>
     {
         Log.Error(ex, "Startup init: migration/seeding failed — ensure ConnectionStrings__DefaultConnection is set in Railway env vars");
     }
+
+    // Release DB-touching background services whether migration succeeded or
+    // failed — they handle database errors with their own retry logic.
+    app.Services.GetRequiredService<SecureShop.API.Services.MigrationCompletedSignal>()
+        .MarkCompleted();
 
     // Product seeding runs in its own isolated try/catch so migration or role
     // failures above cannot prevent the catalogue from being populated.

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using SecureShop.Application.Interfaces;
+using SecureShop.Application.Services;
 using Stripe;
 
 namespace SecureShop.Infrastructure.Services;
@@ -45,13 +46,15 @@ public class PaymentService : IPaymentService
     /// <inheritdoc />
     public async Task CancelPaymentIntentAsync(string paymentIntentId)
     {
-        await new PaymentIntentService(CreateClient()).CancelAsync(paymentIntentId);
+        await new PaymentIntentService(CreateClient())
+            .CancelAsync(PaymentIntentIdHelper.Sanitize(paymentIntentId));
     }
 
     /// <inheritdoc />
     public async Task<PaymentIntentState> GetPaymentIntentStatusAsync(string paymentIntentId)
     {
-        var intent = await new PaymentIntentService(CreateClient()).GetAsync(paymentIntentId);
+        var intent = await new PaymentIntentService(CreateClient())
+            .GetAsync(PaymentIntentIdHelper.Sanitize(paymentIntentId));
         return intent.Status switch
         {
             "requires_payment_method" => PaymentIntentState.RequiresPaymentMethod,
@@ -69,7 +72,7 @@ public class PaymentService : IPaymentService
     public async Task<string> RefundPaymentIntentAsync(string paymentIntentId, string idempotencyKey)
     {
         var refund = await new RefundService(CreateClient()).CreateAsync(
-            new RefundCreateOptions { PaymentIntent = paymentIntentId },
+            new RefundCreateOptions { PaymentIntent = PaymentIntentIdHelper.Sanitize(paymentIntentId) },
             new RequestOptions { IdempotencyKey = idempotencyKey });
         return refund.Id;
     }

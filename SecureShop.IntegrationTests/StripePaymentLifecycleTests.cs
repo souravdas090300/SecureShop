@@ -384,10 +384,13 @@ public class StripePaymentLifecycleTests
                 ["Orders:AbandonmentIntervalMinutes"] = "5"
             })
             .Build();
+        var migrationSignal = new MigrationCompletedSignal();
+        migrationSignal.MarkCompleted();
         var job = new OrderAbandonmentService(
             factory.Services.GetRequiredService<IServiceScopeFactory>(),
             config,
-            NullLogger<OrderAbandonmentService>.Instance);
+            NullLogger<OrderAbandonmentService>.Instance,
+            migrationSignal);
 
         await job.SweepOnceAsync();
 

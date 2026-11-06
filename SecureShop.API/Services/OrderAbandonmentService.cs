@@ -5,7 +5,9 @@ namespace SecureShop.API.Services;
 
 /// <summary>
 /// Periodically cancels PaymentIntents and orders that were created but never
-/// paid, releasing their reserved stock. Runs every
+/// paid, releasing their reserved stock. Waits for the startup database
+/// migration to finish before its first sweep so it never queries a schema
+/// that is still being migrated. Runs every
 /// <c>Orders:AbandonmentIntervalMinutes</c> (default 5) and abandons orders in
 /// PaymentProcessing older than <c>Orders:AbandonAfterMinutes</c> (default 30).
 /// Safe under multiple instances: order transitions are atomic, so stock is
@@ -16,6 +18,7 @@ public class OrderAbandonmentService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _configuration;
     private readonly ILogger<OrderAbandonmentService> _logger;
+    private readonly MigrationCompletedSignal _migrationSignal;
 
     private static readonly TimeSpan DefaultInterval = TimeSpan.FromMinutes(5);
     private const int DefaultAbandonAfterMinutes = 30;
@@ -25,11 +28,13 @@ public class OrderAbandonmentService : BackgroundService
     public OrderAbandonmentService(
         IServiceScopeFactory scopeFactory,
         IConfiguration configuration,
-        ILogger<OrderAbandonmentService> logger)
+        ILogger<OrderAbandonmentService> logger,
+        MigrationCompletedSignal migrationSignal)
     {
         _scopeFactory = scopeFactory;
         _configuration = configuration;
         _logger = logger;
+        _migrationSignal = migrationSignal;
     }
 
     /// <inheritdoc />
@@ -37,6 +42,10 @@ public class OrderAbandonmentService : BackgroundService
     {
         var intervalMinutes = _configuration.GetValue("Orders:AbandonmentIntervalMinutes", 5);
         var interval = intervalMinutes > 0 ? TimeSpan.FromMinutes(intervalMinutes) : DefaultInterval;
+
+        // Do not touch the database until the startup migration has finished —
+        // the sweep would otherwise query tables/columns that may not exist yet.
+        await _migrationSignal.Completion.WaitAsync(stoppingToken);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -86,6 +95,7 @@ public class OrderAbandonmentService : BackgroundService
         {
             cancellationToken.ThrowIfCancellationRequested();
             var intentId = order.StripePaymentIntentId!;
+            var maskedIntentId = PaymentIntentIdHelper.Mask(intentId);
             try
             {
                 var state = await paymentService.GetPaymentIntentStatusAsync(intentId);
@@ -99,7 +109,7 @@ public class OrderAbandonmentService : BackgroundService
                         // sweep resolves it to a terminal state.
                         _logger.LogInformation(
                             "Order {OrderId}: intent {PaymentIntentId} is {State}; skipping abandonment",
-                            order.Id, intentId, state);
+                            order.Id, maskedIntentId, state);
                         break;
 
                     case PaymentIntentState.Canceled:
@@ -110,7 +120,7 @@ public class OrderAbandonmentService : BackgroundService
                     case PaymentIntentState.Unknown:
                         _logger.LogWarning(
                             "Order {OrderId}: could not determine intent {PaymentIntentId} state; skipping",
-                            order.Id, intentId);
+                            order.Id, maskedIntentId);
                         break;
 
                     default:
@@ -128,7 +138,7 @@ public class OrderAbandonmentService : BackgroundService
                 // retry on the next sweep.
                 _logger.LogWarning(ex,
                     "Abandonment failed for order {OrderId} / intent {PaymentIntentId}; will retry",
-                    order.Id, intentId);
+                    order.Id, maskedIntentId);
             }
         }
     }

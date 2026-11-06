@@ -338,7 +338,7 @@ public class OrderService
         foreach (var item in order.Items)
             await EvictProductCacheAsync(item.ProductId);
 
-        _logger.LogInformation("Order {OrderId} cancelled after payment intent {PaymentIntentId} was cancelled; stock restored", order.Id, paymentIntentId);
+        _logger.LogInformation("Order {OrderId} cancelled after payment intent {PaymentIntentId} was cancelled; stock restored", order.Id, PaymentIntentIdHelper.Mask(paymentIntentId));
         return true;
     }
 
@@ -360,7 +360,7 @@ public class OrderService
 
         _logger.LogWarning(
             "Late payment on cancelled order {OrderId}: payment intent {PaymentIntentId} succeeded after cancellation; refund {RefundId} issued",
-            order.Id, order.StripePaymentIntentId, refundId);
+            order.Id, PaymentIntentIdHelper.Mask(order.StripePaymentIntentId), refundId);
     }
 
     /// <summary>
