@@ -1,5 +1,5 @@
 # ── Stage 1: Build ───────────────────────────────────────────
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy solution + project files first (layer cache for NuGet restore)
@@ -24,7 +24,7 @@ RUN dotnet test SecureShop.UnitTests --no-restore --configuration Release --verb
 RUN dotnet publish SecureShop.API --no-restore --configuration Release --output /app/publish
 
 # ── Stage 2: Runtime ─────────────────────────────────────────
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
 # Non-root user for security

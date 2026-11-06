@@ -33,7 +33,7 @@ public class CacheService : ICacheService
         {
             var value = await _db.StringGetAsync(key);
             // Return default when the key doesn't exist or has expired.
-            return value.IsNullOrEmpty ? default : JsonSerializer.Deserialize<T>(value!);
+            return value.IsNullOrEmpty ? default : JsonSerializer.Deserialize<T>(value.ToString());
         }
         catch (Exception)
         {

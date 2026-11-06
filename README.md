@@ -2,7 +2,7 @@
 
 A full-stack e-commerce application built with ASP.NET Core 8, Clean Architecture, PostgreSQL, and Stripe (test mode). It combines a Razor Pages storefront, a separate admin area, a JWT-secured REST API, and a payment lifecycle designed to stay correct under retries and concurrent orders.
 
-[![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?style=flat-square&logo=dotnet)](https://dotnet.microsoft.com/)
+[![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet)](https://dotnet.microsoft.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://neon.tech/)
 [![Stripe](https://img.shields.io/badge/Stripe-test_mode-635BFF?style=flat-square&logo=stripe&logoColor=white)](https://stripe.com/)
 [![Tests](https://img.shields.io/badge/tests-452_passing-brightgreen?style=flat-square)](#testing)
@@ -91,7 +91,7 @@ Controllers and page models stay thin. Business rules live in the Domain and App
 
 | Area | Technology |
 |------|------------|
-| Runtime | .NET 8 / ASP.NET Core (see [Known Limitations](#known-limitations) for the .NET 10 upgrade) |
+| Runtime | .NET 10 / ASP.NET Core |
 | UI | Razor Pages |
 | Data | PostgreSQL (Neon) via EF Core and Npgsql |
 | Cache | Redis via StackExchange.Redis (optional) |
@@ -129,7 +129,7 @@ SecureShop/
 
 ### Prerequisites
 
-- [.NET 8 SDK](https://dotnet.microsoft.com/download)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - PostgreSQL (local Docker is fine) or a free [Neon](https://neon.tech/) database
 - A Stripe account in test mode
 - EF Core CLI: `dotnet tool install --global dotnet-ef`
@@ -323,7 +323,7 @@ This project is not approved for live payments.
 - **Checkout data:** shipping and contact details are collected but not yet saved with the order
 - **Operations:** SMTP over TLS needs validation, readiness checks for the database are not implemented, and migrations run at application startup rather than as a separate release step
 - **Data Protection keys** are stored unencrypted in the database; add key protection before real customers
-- **Runtime:** .NET 8 reaches end of support on 10 November 2026. An upgrade to .NET 10 is in progress in a separate pull request
+- ~~**Runtime:**~~ Upgraded to .NET 10 LTS
 - **Admin 2FA is opt-in:** admins who have not enrolled a TOTP key sign in with password only
 
 ## Roadmap
@@ -335,7 +335,7 @@ This project is not approved for live payments.
 - [ ] Migrations as a release step
 - [ ] Encrypted Data Protection keys
 - [ ] Enforce admin 2FA enrollment (currently opt-in)
-- [ ] Upgrade to .NET 10
+- [x] Upgrade to .NET 10
 - [ ] Docker support
 
 ## License

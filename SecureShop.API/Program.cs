@@ -13,7 +13,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi;
 using Serilog;
 using SecureShop.API.Middleware;
 using SecureShop.API.Helpers;
@@ -288,19 +288,9 @@ builder.Services.AddSwaggerGen(c =>
         Name         = "Authorization"
     });
 
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    c.AddSecurityRequirement(_ => new OpenApiSecurityRequirement
     {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id   = "Bearer"
-                }
-            },
-            Array.Empty<string>()
-        }
+        [new OpenApiSecuritySchemeReference("Bearer")] = []
     });
 });
 
@@ -344,7 +334,7 @@ var forwardedHeadersOptions = new ForwardedHeadersOptions
 // Railway's proxy is not loopback, so the default trust lists (loopback only)
 // must be cleared or the headers are silently ignored. Known consequence: any
 // client can spoof X-Forwarded-For — acceptable behind Railway's edge.
-forwardedHeadersOptions.KnownNetworks.Clear();
+forwardedHeadersOptions.KnownIPNetworks.Clear();
 forwardedHeadersOptions.KnownProxies.Clear();
 app.UseForwardedHeaders(forwardedHeadersOptions);
 

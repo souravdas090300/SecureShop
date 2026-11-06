@@ -57,7 +57,7 @@ public class StripeWebhookControllerTests
         {
             id = "evt_test_123",
             @object = "event",
-            api_version = "2026-02-25.clover",
+            api_version = "2026-10-28.endive",
             created = timestamp,
             data = new
             {
