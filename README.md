@@ -1,453 +1,347 @@
 # SecureShop
 
-An e-commerce application built with **ASP.NET Core 8**, following Clean Architecture principles and deployed on **Railway**. Public production readiness is still gated; see [Known limitations and pre-deployment blockers](#known-limitations-and-pre-deployment-blockers).
+A full-stack e-commerce application built with ASP.NET Core 8, Clean Architecture, PostgreSQL, and Stripe (test mode). It combines a Razor Pages storefront, a separate admin area, a JWT-secured REST API, and a payment lifecycle designed to stay correct under retries and concurrent orders.
 
-The application ships a full customer-facing storefront (Razor Pages), a separate admin panel, and a RESTful JSON API — all in a single host process.
+[![.NET 8](https://img.shields.io/badge/.NET-8.0-512BD4?style=flat-square&logo=dotnet)](https://dotnet.microsoft.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://neon.tech/)
+[![Stripe](https://img.shields.io/badge/Stripe-test_mode-635BFF?style=flat-square&logo=stripe&logoColor=white)](https://stripe.com/)
+[![Tests](https://img.shields.io/badge/tests-452_passing-brightgreen?style=flat-square)](#testing)
+[![Hosting](https://img.shields.io/badge/hosted_on-Railway-0B0D0E?style=flat-square&logo=railway&logoColor=white)](https://railway.app/)
 
-**Live URL:** `https://secureshop-production-2eac.up.railway.app`
+**Live demo:** https://secureshop-production-ff66.up.railway.app
 
----
+> **Test mode only.** Payments use Stripe's test environment. At checkout, use card `4242 4242 4242 4242` with any future expiry and any CVC. No real money moves. See [Known Limitations](#known-limitations) before treating this as production-ready.
 
-## Table of contents
+<!-- Add screenshots here before sharing: ![Storefront](docs/images/storefront.png) ![Checkout](docs/images/checkout.png) ![Admin dashboard](docs/images/admin.png) -->
 
-1. [Architecture](#architecture)
-2. [Tech stack](#tech-stack)
-3. [Project structure](#project-structure)
-4. [Features](#features)
-5. [API reference](#api-reference)
-6. [Admin panel](#admin-panel)
-7. [Running locally](#running-locally)
-8. [Deploying to Railway](#deploying-to-railway)
-9. [Environment variables](#environment-variables)
-10. [Security](#security)
-11. [Known limitations and pre-deployment blockers](#known-limitations-and-pre-deployment-blockers)
-12. [Testing](#testing)
-13. [Code documentation](#code-documentation)
+## Table of Contents
 
----
+- [Highlights](#highlights)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Configuration](#configuration)
+- [Payment Lifecycle](#payment-lifecycle)
+- [Stock Integrity](#stock-integrity)
+- [Admin Area](#admin-area)
+- [API Overview](#api-overview)
+- [Security](#security)
+- [Testing](#testing)
+- [CI/CD and Deployment](#cicd-and-deployment)
+- [Known Limitations](#known-limitations)
+- [Roadmap](#roadmap)
 
-## Architecture
+## Highlights
 
-SecureShop follows **Clean Architecture** — dependencies only point inward:
-
-```
-┌─────────────────────────────────────────┐
-│  SecureShop.API                         │  ← Presentation (controllers, Razor Pages, middleware)
-│  ┌───────────────────────────────────┐  │
-│  │  SecureShop.Application           │  │  ← Business logic (services, interfaces, DTOs, validators)
-│  │  ┌─────────────────────────────┐  │  │
-│  │  │  SecureShop.Domain          │  │  │  ← Entities, enums, domain exceptions (no dependencies)
-│  │  └─────────────────────────────┘  │  │
-│  └───────────────────────────────────┘  │
-│  SecureShop.Infrastructure              │  ← EF Core, Identity, Redis, Stripe, SMTP
-└─────────────────────────────────────────┘
-```
-
-**Key patterns:**
-- Clean Architecture with dependency inversion
-- Repository pattern (`IProductRepository`, `IOrderRepository`)
-- Domain aggregates with factory methods and invariant enforcement
-- Service layer for orchestration (caching, payment, stock management)
-- FluentValidation for request validation
-- Structured logging (ILogger throughout; stdout collected by Railway)
-
----
-
-## Tech stack
-
-| Concern | Technology |
-|---|---|
-| Framework | ASP.NET Core 8 (Razor Pages + Web API) |
-| Database | PostgreSQL via [Neon](https://neon.tech) (EF Core 8 + Npgsql) |
-| Cache | Redis via [Upstash](https://upstash.com) (StackExchange.Redis) |
-| Auth (customers) | ASP.NET Core Identity + JWT Bearer + Cookie |
-| Auth (admin) | ASP.NET Core Identity + `AdminCookie` scheme |
-| Auth (OAuth) | Google Sign-In (ID token validation) |
-| Payments | Stripe Payment Intents + Payment Element (test mode only) |
-| Validation | FluentValidation |
-| Data Protection | EF Core key storage (PostgreSQL) — survives restarts |
-| Email | SMTP (configurable — Gmail, SendGrid, etc.) |
-| Deployment | [Railway](https://railway.app) — Docker, PORT=8080 |
-
----
-
-## Project structure
-
-```
-SecureShop.sln
-├── SecureShop.API/
-│   ├── Controllers/
-│   │   ├── AuthController.cs        – Register, login, Google OAuth, JWT status
-│   │   ├── ProductsController.cs    – Product catalogue (public reads, admin writes)
-│   │   ├── OrdersController.cs      – Order placement and retrieval
-│   │   └── StripeWebhookController.cs – Signed Stripe payment confirmation
-│   ├── Middleware/
-│   │   ├── GlobalExceptionMiddleware.cs   – Maps exceptions → HTTP status codes
-│   │   ├── SecurityHeadersMiddleware.cs   – CSP, X-Frame-Options, Permissions-Policy
-│   │   └── CacheBustingMiddleware.cs      – no-store headers for account/auth pages
-│   ├── Pages/
-│   │   ├── (customer storefront)          – Index, Products, Cart, Checkout, About, Contact
-│   │   ├── Account/                       – Login, Register, Logout, Orders, ForgotPassword, VerifyOtp, GoogleCallback
-│   │   └── Admin/                         – Dashboard, Products, Orders, Customers, Reports, Profile, Settings
-│   ├── Helpers/
-│   │   └── JwtCookieHelper.cs       – Converts JWT → ClaimsPrincipal for cookie sign-in
-│   └── Program.cs                   – Host setup, middleware pipeline, DI registrations
-│
-├── SecureShop.Application/
-│   ├── Services/
-│   │   ├── ProductService.cs        – Catalogue management + Redis caching
-│   │   └── OrderService.cs          – Order creation, stock handling, payment confirmation
-│   ├── Interfaces/                  – IAuthService, IProductRepository, IOrderRepository,
-│   │                                   ICacheService, IEmailService, IPaymentService
-│   ├── DTOs/                        – Auth, Product, Order request/response records
-│   └── Validators/                  – FluentValidation for RegisterDto, CreateProductDto
-│
-├── SecureShop.Domain/
-│   ├── Entities/                    – ApplicationUser, Product, Order, OrderItem
-│   ├── Enums/                       – OrderStatus
-│   └── Exceptions/                  – DomainException
-│
-├── SecureShop.Infrastructure/
-│   ├── Data/
-│   │   ├── AppDbContext.cs          – EF Core context (Identity + DataProtection + store tables)
-│   │   └── AppDbContextFactory.cs   – Design-time factory for EF migrations
-│   ├── Repositories/
-│   │   ├── ProductRepository.cs     – EF Core IProductRepository implementation
-│   │   └── OrderRepository.cs       – EF Core IOrderRepository implementation
-│   ├── Services/
-│   │   ├── AuthService.cs           – Identity + JWT token generation
-│   │   ├── CacheService.cs          – Redis-backed ICacheService (resilient to failures)
-│   │   ├── NullCacheService.cs      – No-op fallback when Redis is unavailable
-│   │   ├── EmailService.cs          – SMTP email sender
-│   │   └── PaymentService.cs        – Test-mode Stripe Payment Intents
-│   ├── DependencyInjection.cs       – Infrastructure DI registration
-│   └── Migrations/                  – EF Core migration history
-│
-├── SecureShop.UnitTests/            – 354 xUnit unit tests
-└── SecureShop.IntegrationTests/     – 6 HTTP integration tests
-```
-
----
+- Clean Architecture with enforced dependency direction: Domain and Application have no knowledge of EF Core, Stripe, or ASP.NET.
+- Payments that survive real-world behaviour: signed Stripe webhooks, idempotent event handling, atomic order transitions, and an abandoned-order sweeper.
+- No overselling: stock is reserved with a single atomic conditional `UPDATE`, proven by a concurrency test against real PostgreSQL.
+- 452 automated tests (389 unit, 63 integration), including database-backed tests that run in CI against a PostgreSQL service container and fail the build if skipped.
+- Defence in depth: account lockout, rate limiting, security headers, a CSP that allows Stripe, antiforgery, and a separately authorised admin area with optional TOTP two-factor authentication.
 
 ## Features
 
-### Customer storefront
-- Product catalogue with category filtering and search (paginated, Redis-cached)
-- Shopping cart (session-based, client-side)
-- Test-mode Stripe Payment Element checkout; signed webhook events drive the full payment lifecycle (see below)
-- Server-calculated order totals; no tax is currently collected
-- Account registration and login (email/password + Google OAuth)
-- Password reset via OTP email
-- Order history page
-- Checkout collects contact and shipping details, but those details are not currently saved with the order
+### Storefront
 
-### Admin panel (`/admin`)
-- **Dashboard** — revenue, order, customer, and product statistics (AJAX from API)
-- **Products** — create, edit, soft-delete; image URL support
-- **Orders** — list and view orders; advance paid orders through shipping and delivery
-- **Customers** — browse registered users
-- **Reports** — sales summary and charts
-- **Profile** (`/admin/profile`) — view authenticated admin name, email, and role
-- **Settings** (`/admin/settings`) — store info, order config, security, notifications, system info tabs
+- Product catalogue with search, filtering, and featured products
+- Client-side shopping cart
+- Checkout with the Stripe Payment Element (card data never reaches this server)
 
-### REST API
-- JWT Bearer authentication (8-hour token, HMAC-SHA256)
-- Role-based authorization (`Admin`, `Customer`)
-- Rate limiting (100 req/min on controller endpoints, 10 req/min on auth endpoints; partitioned by connection IP)
-- Swagger/OpenAPI documentation, available in Development only
+### Accounts
 
----
+- Registration and login with lockout after repeated failures
+- Google sign-in
+- OTP-based password reset
+- Order history
 
-## API reference
+### Admin area (at `/admin`, not linked from the storefront)
 
-Base URL: `https://secureshop-production-2eac.up.railway.app`
+- Dashboard, product management, customer management, order management, and reports
+- Separate sign-in, cookie scheme, and authorisation from customer accounts
+- Optional TOTP two-factor authentication with recovery codes
+- Dedicated layout, `noindex`/`no-store` response headers, and a stricter login rate limit
 
-### Authentication
+### Platform
 
-#### `POST /api/auth/register`
-Creates a new `Customer` account and returns a signed JWT.
+- JWT-secured REST API with Swagger
+- Optional Redis cache (falls back to a no-op cache when not configured)
+- Cloudinary product image uploads
+- Structured logging with Serilog
+- Health endpoint at `/health`
 
-```json
-{
-  "firstName": "Jane",
-  "lastName": "Doe",
-  "email": "jane@example.com",
-  "password": "SecurePass1!"
-}
+## Architecture
+
+Dependencies point inward.
+
+```
+SecureShop.API              Controllers, Razor Pages, middleware, background services
+   └─ depends on Application + Infrastructure
+SecureShop.Infrastructure   EF Core, Identity, JWT, Redis, Stripe, repositories
+   └─ depends on Application
+SecureShop.Application      Use cases, interfaces, DTOs, validators
+   └─ depends on Domain
+SecureShop.Domain           Entities, enums, domain exceptions (no dependencies)
 ```
 
-#### `POST /api/auth/login`
-Authenticates with email and password; returns a signed JWT.
+Controllers and page models stay thin. Business rules live in the Domain and Application layers and are tested without a web host.
 
-```json
-{ "email": "jane@example.com", "password": "SecurePass1!" }
+## Tech Stack
+
+| Area | Technology |
+|------|------------|
+| Runtime | .NET 8 / ASP.NET Core (see [Known Limitations](#known-limitations) for the .NET 10 upgrade) |
+| UI | Razor Pages |
+| Data | PostgreSQL (Neon) via EF Core and Npgsql |
+| Cache | Redis via StackExchange.Redis (optional) |
+| Auth | ASP.NET Identity, JWT bearer, cookie auth (customer + dedicated admin cookie), Google sign-in, TOTP 2FA for admins |
+| Payments | Stripe.net: PaymentIntents, Payment Element, webhooks |
+| Images | Cloudinary |
+| Validation | FluentValidation |
+| Logging | Serilog |
+| Tests | xUnit, Moq, FluentAssertions, real PostgreSQL integration tests |
+| CI/CD | GitHub Actions |
+| Hosting | Railway (app), Neon (database) |
+
+## Project Structure
+
+```
+SecureShop/
+├── SecureShop.Domain/             Entities, enums, DomainException
+├── SecureShop.Application/        Services, interfaces, DTOs, validators
+├── SecureShop.Infrastructure/     DbContext, migrations, repositories, payment/cache/auth services
+├── SecureShop.API/
+│   ├── Controllers/               Auth, Products, Orders, StripeWebhook
+│   ├── Pages/                     Storefront, Checkout, Account, Admin (own layout, login, 2FA)
+│   ├── Middleware/                Security headers, global exception handling
+│   ├── Services/                  Background services (order abandonment sweep)
+│   └── Program.cs                 Composition root
+├── SecureShop.UnitTests/          389 unit tests
+├── SecureShop.IntegrationTests/   63 integration tests (HTTP and real PostgreSQL)
+├── docs/
+│   └── pre-deployment-blockers.md
+├── .env.example                   Template of every setting (no secrets)
+└── .github/workflows/ci.yml       Build and test pipeline
 ```
 
-Response:
-```json
-{
-  "token": "<JWT>",
-  "email": "jane@example.com",
-  "firstName": "Jane",
-  "lastName": "Doe",
-  "expiresAt": "2026-05-15T20:00:00Z"
-}
-```
-
-Pass the token as `Authorization: Bearer <token>` on all authenticated endpoints.
-
-#### `POST /api/auth/google`
-Exchanges a Google ID token for a local JWT. Creates the account automatically on first sign-in.
-
-```json
-{ "idToken": "<Google ID token>" }
-```
-
----
-
-### Products
-
-| Method | Route | Auth | Description |
-|--------|-------|------|-------------|
-| `GET` | `/api/products` | None | List products (paginated, filterable) |
-| `GET` | `/api/products/{id}` | None | Get single product |
-| `POST` | `/api/products` | Admin | Create product |
-| `PUT` | `/api/products/{id}` | Admin | Update product |
-| `DELETE` | `/api/products/{id}` | Admin | Soft-delete product |
-
-Query parameters for `GET /api/products`:
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `category` | string | — | Filter by category name |
-| `search` | string | — | Search name and description |
-| `page` | int | 1 | Page number (1-based) |
-| `pageSize` | int | 10 | Items per page |
-
----
-
-### Orders
-
-All order endpoints require a valid JWT (`Authorization: Bearer <token>`).
-
-| Method | Route | Auth | Description |
-|--------|-------|------|-------------|
-| `POST` | `/api/orders` | Customer JWT | Place a new order |
-| `GET` | `/api/orders/my` | Customer JWT | Get your orders |
-| `GET` | `/api/orders/{id}` | Customer JWT or Admin | Get order by ID |
-| `GET` | `/api/orders` | Admin | Get all orders |
-| `PUT` | `/api/orders/{id}/status` | Admin | Advance an order through allowed fulfillment statuses |
-| `POST` | `/api/webhooks/stripe` | Stripe signature | Idempotently process `payment_intent.succeeded` / `.payment_failed` / `.canceled` events |
-
-Create order request:
-```json
-{
-  "items": [
-    { "productId": "<guid>", "quantity": 2 }
-  ]
-}
-```
-
-For a successful `POST /api/orders`, `stripePaymentIntentId` is the Stripe PaymentIntent ID. `paymentClientSecret` is returned for the checkout page to confirm the payment with Stripe.js; it is not stored as the order's payment ID. The order remains unpaid until the signed webhook confirms it. Stripe.net 50.4.1 expects webhook API version `2026-02-25.clover`.
-
-### Payment lifecycle
-
-Order stock is reserved atomically at checkout and released exactly once when payment can no longer complete:
-
-- **`payment_intent.succeeded`** — verified against the order's PaymentIntent ID, amount, and currency, then `PaymentProcessing → Paid` via a single conditional `UPDATE`. Duplicate deliveries are no-ops.
-- **`payment_intent.payment_failed`** — records `LastPaymentFailureCode`/`LastPaymentFailureAt` on the order. The status stays `PaymentProcessing` and stock stays reserved, because the PaymentIntent remains retryable (`requires_payment_method`).
-- **`payment_intent.canceled`** — atomically transitions `PaymentProcessing → Cancelled` and restores every reserved line. A `Paid` order is never cancelled.
-- **Webhook idempotency** — every processed event ID is recorded in `ProcessedStripeEvents` inside the same transaction as its effects (`INSERT ... ON CONFLICT DO NOTHING`). Duplicate or parallel deliveries return 200 without repeating side effects; transient errors return 5xx so Stripe retries.
-- **Abandoned checkouts** — `OrderAbandonmentService` runs every `Orders__AbandonmentIntervalMinutes` (default 5) and cancels `PaymentProcessing` orders older than `Orders__AbandonAfterMinutes` (default 30). It asks Stripe for the intent state first: already-succeeded intents are left for the webhook to mark paid; failed lookups are retried next sweep.
-- **Late payment** — a `succeeded` event for an already-`Cancelled` order is not marked paid; the payment is refunded (`RefundPaymentIntentAsync`, idempotency key `secure-shop-refund-{orderId}`) and `StripeRefundId` is stored on the order. A Warning is logged for manual review.
-
-In Stripe, register the webhook endpoint `https://<your-domain>/api/webhooks/stripe` for `payment_intent.succeeded`, `payment_intent.payment_failed`, and `payment_intent.canceled`, and set `Stripe__WebhookSecret` to that endpoint's signing secret.
-
----
-
-## Admin panel
-
-The admin panel is accessible at `/admin`. It uses a separate `AdminCookie` authentication scheme independent from the customer JWT flow.
-
-| Page | Route | Description |
-|------|-------|-------------|
-| Dashboard | `/admin` | KPI cards and recent activity |
-| Products | `/admin/products` | Product management (CRUD) |
-| Orders | `/admin/orders` | Order list and status management |
-| Customers | `/admin/customers` | Registered customer list |
-| Reports | `/admin/reports` | Sales charts and summaries |
-| Profile | `/admin/profile` | Current admin's account info |
-| Settings | `/admin/settings` | Store configuration (4 tabs) |
-| Logout | `/admin/logout` | Signs out the AdminCookie session |
-
-Admin login is at `/admin/login`. Only users with the `Admin` role can log in. New installations can optionally create the first administrator using `BootstrapAdmin__Email` and `BootstrapAdmin__Password`; set both together, then remove both after creation. There is no source-coded default admin password.
-
----
-
-## Running locally
+## Getting Started
 
 ### Prerequisites
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download)
-- PostgreSQL (or a [Neon](https://neon.tech) free-tier database)
-- Redis — **optional**. Without it the app uses an in-memory no-op cache (data always comes from the DB; performance is lower but everything works).
+- PostgreSQL (local Docker is fine) or a free [Neon](https://neon.tech/) database
+- A Stripe account in test mode
+- EF Core CLI: `dotnet tool install --global dotnet-ef`
 
-### 1. Clone and restore
+### Run locally
 
 ```bash
 git clone https://github.com/souravdas090300/SecureShop.git
 cd SecureShop
 dotnet restore
+dotnet build
 ```
 
-### 2. Configure secrets
-
-Create `SecureShop.API/appsettings.Development.json`:
-
-```json
-{
-  "ConnectionStrings": {
-    "Redis": "",
-    "DefaultConnection": "Host=<host>;Database=<db>;Username=<user>;Password=<pass>;SSL Mode=Require"
-  },
-  "Jwt": {
-    "Secret": "<random-string-min-32-chars>",
-    "Issuer": "SecureShop",
-    "Audience": "SecureShopUsers"
-  },
-  "Stripe": {
-    "SecretKey": "sk_test_...",
-    "PublishableKey": "pk_test_...",
-    "WebhookSecret": "whsec_..."
-  },
-  "GoogleAuth": {
-    "ClientId": "<Google OAuth client ID>"
-  },
-  "AllowedOrigins": "http://localhost:8080"
-}
-```
-
-> Leave `Redis` blank to run without caching; if enabling it, use a connection-string format accepted by `StackExchange.Redis.ConfigurationOptions.Parse`.
-> Omit `GoogleAuth` to disable Google Sign-In.  
-> Omit `Email` credentials to disable password-reset emails (a warning is logged instead).
-> **Email caveat:** email settings are omitted because the current SMTP implementation has a TLS-mode mismatch. .NET's `SmtpClient` supports STARTTLS, not implicit TLS on port 465, while this implementation disables TLS on 587. Fix and verify the transport before relying on email flows.
-
-### 3. Apply migrations
+ASP.NET Core does not read `.env` files. Set configuration with user-secrets (see [Configuration](#configuration)):
 
 ```bash
-dotnet ef database update --project SecureShop.Infrastructure --startup-project SecureShop.API
+cd SecureShop.API
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=secureshop_dev;SSL Mode=Disable"
+dotnet user-secrets set "Jwt:Secret" "<32+ random characters>"
+dotnet user-secrets set "Stripe:SecretKey" "sk_test_..."
+dotnet user-secrets set "Stripe:PublishableKey" "pk_test_..."
+dotnet run
 ```
 
-### 4. Run
+Migrations are applied automatically at startup. To apply them manually:
 
 ```bash
-dotnet run --project SecureShop.API
+dotnet ef database update `
+  --project SecureShop.Infrastructure `
+  --startup-project SecureShop.API
 ```
 
-Visit `http://localhost:<port>/swagger` for the interactive API explorer.
-
----
-
-## Deploying to Railway
-
-Review the [pre-deployment blockers](./docs/pre-deployment-blockers.md) before exposing the app publicly, and consult the [configuration inventory](./.github/modernize/assessment/engines/facts/configuration-inventory.md) for settings. Configure Stripe using test credentials only; never use live payment keys with the current implementation.
-
-Railway watches the `main` branch and deploys automatically on every push using the `Dockerfile` in the repo root:
+### Test the Stripe webhook locally
 
 ```bash
-git push origin main
+stripe listen --forward-to localhost:<port>/api/webhooks/stripe
 ```
 
-EF Core migrations run automatically in a background task 2 seconds after Kestrel starts accepting requests. `/health` is liveness-only and may pass before migrations finish; verify startup logs and database operations.
+Copy the `whsec_...` it prints into `Stripe:WebhookSecret`, then pay with `4242 4242 4242 4242`. The order should move to `Paid`.
 
----
+## Configuration
 
-## Environment variables
+Nested keys use a double underscore in environment variables (for example `Stripe__SecretKey`). Never commit real secrets; see `.env.example` for the full template.
 
-Set these in the Railway service dashboard (use `__` as the section separator):
+| Setting | Required | Purpose |
+|---------|----------|---------|
+| `ConnectionStrings__DefaultConnection` | Yes | PostgreSQL connection string (Npgsql format, not a URI) |
+| `ConnectionStrings__Redis` | No | Redis connection string. When blank, a no-op cache is used |
+| `Jwt__Secret` | Yes | JWT signing secret, 32+ characters |
+| `Jwt__Issuer`, `Jwt__Audience` | Yes | JWT validation values |
+| `Stripe__SecretKey` | Yes | Must start with `sk_test_`; other keys are rejected |
+| `Stripe__PublishableKey` | Yes | `pk_test_...` for the Payment Element |
+| `Stripe__WebhookSecret` | Yes | Signing secret of the webhook endpoint |
+| `GoogleAuth__ClientId`, `GoogleAuth__ClientSecret` | For Google sign-in | OAuth credentials |
+| `Email__SmtpHost`, `SmtpPort`, `SmtpUser`, `SmtpPassword`, `FromName` | For emails | SMTP settings (used for password reset) |
+| `Cloudinary__CloudName`, `Cloudinary__UploadPreset` | For images | Product image uploads |
+| `AllowedOrigins` | No | Comma-separated CORS origins, no trailing slash |
+| `BootstrapAdmin__Email`, `BootstrapAdmin__Password` | First run only | Creates the first admin if none exists. Remove after use |
+| `Orders__AbandonAfterMinutes` | No | Default 30 |
+| `Orders__AbandonmentIntervalMinutes` | No | Default 5 |
+| `ASPNETCORE_ENVIRONMENT` | Yes | `Production` on Railway |
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `ConnectionStrings__DefaultConnection` | Yes | Neon PostgreSQL connection string |
-| `ConnectionStrings__Redis` | No | StackExchange.Redis connection string, e.g. `host:port,password=...,ssl=True`; omit to disable caching |
-| `Jwt__Secret` | Yes | HMAC-SHA256 signing key, minimum 32 characters |
-| `Jwt__Issuer` | Yes | `SecureShop` |
-| `Jwt__Audience` | Yes | `SecureShopUsers` |
-| `BootstrapAdmin__Email` | No | Optional one-time initial admin setup; set together with password, then remove after creation |
-| `BootstrapAdmin__Password` | No | Optional one-time secret for initial admin; use a unique strong password and remove after creation |
-| `Stripe__SecretKey` | For test payments | `sk_test_...` only; current code rejects live secret keys |
-| `Stripe__PublishableKey` | For test checkout | `pk_test_...` only |
-| `Stripe__WebhookSecret` | For payment confirmation | Test webhook signing secret (`whsec_...`) |
-| `Orders__AbandonAfterMinutes` | No | Cancel unpaid orders older than this (default `30`) |
-| `Orders__AbandonmentIntervalMinutes` | No | Abandonment sweep interval (default `5`) |
-| `GoogleAuth__ClientId` | No | Google OAuth 2.0 client ID — omit to disable Google Sign-In |
-| `Email__SmtpHost` | No | SMTP host (e.g. `smtp.gmail.com`) |
-| `Email__SmtpPort` | No | SMTP port; current code's TLS handling must be corrected and tested before relying on email |
-| `Email__SmtpUser` | No | SMTP username / sender email |
-| `Email__SmtpPassword` | No | SMTP password or app-specific password |
-| `Email__FromName` | No | Display name for sent emails (default: `SecureShop`) |
-| `AllowedOrigins` | No | Comma-separated CORS origins |
-| `ASPNETCORE_ENVIRONMENT` | Yes | `Production` |
-| `PORT` | Auto | Set by Railway — Kestrel binds to this port |
+`PORT` is provided by Railway and must not be set manually.
 
----
+In Production the app refuses to start if the database connection string is missing, points at localhost, or is still the placeholder — it logs whether the key is present, the parsed host/database (never the password), and the names of `ConnectionStrings*`/`DATABASE*` environment variables before exiting.
 
-## Known limitations and pre-deployment blockers
+## Payment Lifecycle
 
-- **Payments are test-mode only.** Checkout uses Stripe Payment Element. A signed `payment_intent.succeeded` event must match the order's PaymentIntent ID, amount, and currency before the order becomes paid. No live payments are authorized.
-- **Payment lifecycle is implemented but not live-verified.** Test-mode only: signed webhook events drive paid/cancelled/failed transitions, abandoned checkouts release stock via a background sweep, duplicate deliveries are idempotent, and late payments are refunded. Live Stripe behavior, refunds in production, and a tax policy remain unverified/open. Checkout currently collects no tax; a production tax policy remains to be decided and implemented.
-- **Checkout details are not persisted.** Contact and shipping fields are shown in the front end but are not included in the order request or saved with the order.
-- **Email delivery needs a TLS fix and provider testing** before password-reset email can be relied on.
-- **`/health` is liveness-only** and does not check PostgreSQL or migration readiness.
-- **Runtime support needs attention.** This project targets .NET 8; the blocker review records its support end date as November 10, 2026. Upgrade and validate against a supported runtime.
-- **External and deployment validation remains open.** The automated suite does not establish live Stripe behavior, provider integrations, production database readiness, or an HTTPS deployment smoke test.
+Stripe runs in test mode only; any secret key that does not start with `sk_test_` is rejected.
 
-The latest Release build passed with `/warnaserror` and 0 warnings/errors; **376 tests passed** (362 unit, 14 integration). Integration tests run against real PostgreSQL, including payment-lifecycle scenarios (duplicate/parallel webhook deliveries, failed payments, paid-order cancellation, late-payment refunds, and the abandonment sweep). Stripe signature and order-confirmation tests are local unit tests, not a live Stripe transaction. Production approval requires resolving the items above and validating the target environment; see [docs/pre-deployment-blockers.md](./docs/pre-deployment-blockers.md).
+**Order creation.** The server loads each product, calculates the total itself, reserves stock atomically, and creates a Stripe PaymentIntent with an idempotency key. The order stores the PaymentIntent ID, never its client secret.
 
----
+**Payment.** The browser confirms payment with the Stripe Payment Element.
+
+**Webhook.** Stripe calls `POST /api/webhooks/stripe`. The server verifies the signature and checks intent, amount, and currency against the order before marking it `Paid`.
+
+Webhook processing is designed for retries and out-of-order delivery:
+
+| Event | Behaviour |
+|-------|-----------|
+| `payment_intent.succeeded` | Order moves `PaymentProcessing` to `Paid` atomically. A late success on an already cancelled order triggers a refund (idempotent) instead of marking it paid |
+| `payment_intent.payment_failed` | Records the failure on the order and keeps the reservation, because the customer can retry on the same PaymentIntent |
+| `payment_intent.canceled` | Cancels the order and restores stock exactly once |
+
+Supporting mechanisms:
+
+- **Idempotent events:** each event ID is recorded in the same database transaction as its effects, so duplicate or parallel deliveries have no extra effect.
+- **Atomic transitions:** status changes use `UPDATE ... WHERE Status = @from`, so stock is restored only by the request that wins the transition.
+- **Abandonment sweep:** a background service cancels orders left in `PaymentProcessing` beyond the configured time (default 30 minutes). It asks Stripe for the intent's state first and skips intents that already succeeded or are still processing.
+
+No tax is charged. A production tax policy has not been implemented.
+
+## Stock Integrity
+
+Stock is reserved with one conditional statement:
+
+```sql
+UPDATE "Products"
+SET "StockQuantity" = "StockQuantity" - @qty
+WHERE "Id" = @id AND "StockQuantity" >= @qty;
+```
+
+If no row changes, the reservation fails. Orders reserve lines in a fixed order, and any failure restores the lines already reserved. A concurrency test fires parallel orders for limited stock against real PostgreSQL and asserts that exactly the available number succeed. Admin edits persist only changed columns, so they cannot overwrite a concurrent reservation.
+
+## Admin Area
+
+The admin area lives at `/admin` and is not linked from the storefront. Hiding a URL is not security, so protection rests on server-side rules:
+
+- Every page under `/Admin` requires the `Admin` role via an `AdminOnly` policy (`AuthorizeFolder`), except the admin login page and the short-lived 2FA challenge page.
+- Admin pages are tested as a group: anonymous users are redirected to `/admin/login` and authenticated non-admins receive **403**.
+- A dedicated `AdminCookie` scheme (`.SecureShop.Admin`, `Path=/admin`, `SameSite=Strict`, `HttpOnly`, `Secure` outside Development, 45-minute sliding expiry, no remember-me) is fully isolated from the customer cookie — customer sessions cannot reach `/admin/*` and admin sessions cannot reach customer areas.
+- Optional **TOTP two-factor authentication** (ASP.NET Identity authenticator tokens) with recovery codes, enrolled at `/admin/twofactor` and enforced at `/admin/login2fa` when enabled.
+- `/admin/*` responses carry `X-Robots-Tag: noindex, nofollow` and `Cache-Control: no-store`; admin pages use a dedicated `_AdminLayout`, never the storefront layout.
+- `/admin/login` has its own stricter rate limit (~5 attempts/minute per IP) on top of Identity lockout; unknown-email and wrong-password failures return identical text.
+- Sign-out is a POST action.
+
+The first admin is created from `BootstrapAdmin__*` variables on first start and only if no admin exists. Remove those variables afterwards.
+
+## API Overview
+
+Swagger documents every endpoint. Authenticated routes need `Authorization: Bearer <token>`.
+
+| Area | Endpoints | Access |
+|------|-----------|--------|
+| Auth | `POST /api/auth/register`, `POST /api/auth/login` | Public, rate-limited |
+| Products | `GET /api/products`, `GET /api/products/{id}` | Public (`pageSize` capped at 50) |
+| Products | `POST`, `PUT`, `DELETE /api/products` | Admin |
+| Orders | `POST /api/orders`, `GET /api/orders`, `GET /api/orders/{id}` | Authenticated, own orders only |
+| Stripe | `POST /api/webhooks/stripe` | Stripe signature required |
+| Health | `GET /health` | Public |
+
+Order statuses: `Pending` → `PaymentProcessing` → `Paid` → `Shipped` → `Delivered`, or `Cancelled` (not allowed once shipped or delivered).
 
 ## Security
 
-| Control | Detail |
-|---------|--------|
-| Password policy | Uppercase + digit + special char + min 8 characters |
-| Account lockout | 5 failed attempts → 15-minute lockout |
-| Rate limiting | 10 req/min on auth endpoints; 100 req/min on controller endpoints, partitioned by connection IP. Configure trusted forwarded headers before relying on per-client limits behind a reverse proxy. |
-| CSRF protection | Razor Page forms and cookie-authenticated admin API mutations validate antiforgery tokens; logout is POST-only |
-| Security headers | `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, and a CSP with Stripe Payment Element origins; script/style inline allowances remain and need a nonce-based hardening pass. |
-| Clickjacking | `X-Frame-Options: DENY` in production; `SAMEORIGIN` in development |
-| Auth cookies | `HttpOnly`, `SameSite=Lax`; `Secure=Always` outside Development and `SameAsRequest` in Development |
-| JWT | HMAC-SHA256, 8-hour expiry, zero clock skew |
-| Data Protection keys | Stored in PostgreSQL via EF Core — survive process restarts and multi-instance deployments |
-| HTTPS | Terminated at Railway's load balancer; `UseHttpsRedirection` is intentionally disabled inside the container to avoid redirect loops |
-| Google OAuth | ID tokens validated server-side with the Google API; unverified Google email claims are rejected; app JWT is exchanged by POST rather than placed in a URL |
-| SQL injection | Prevented entirely by EF Core parameterised queries |
-| Roles | `Admin` — full catalogue and order management; `Customer` — place and view own orders |
-
----
+- JWT bearer and cookie authentication; role-based authorisation
+- Account lockout after 5 failed attempts for 15 minutes
+- Identical errors for unknown email and wrong password (anti-enumeration)
+- Per-client-IP rate limiting, with a stricter policy on `/admin/login`
+- Forwarded-header handling for Railway's proxy so rate limits see real client IPs
+- Antiforgery on form posts; secure cookies in production
+- Security headers and a Content-Security-Policy that allows only the Stripe origins needed
+- Stripe webhook signature verification; card data never touches the server
+- Order totals calculated server-side; quantities validated at the application and domain layers
+- Pagination limits to prevent oversized queries
+- No default admin password in code
+- Data Protection keys persisted in PostgreSQL so cookies survive redeploys
 
 ## Testing
 
 ```bash
-dotnet test
+dotnet build SecureShop.sln -c Release /warnaserror
+dotnet test SecureShop.sln -c Release
 ```
 
-**376 test cases pass** — 362 unit tests and 14 integration tests. The integration tests verify `/health`, production authentication-cookie settings, production Swagger unavailability, Stripe CSP directives, invalid product pagination, authentication debug pages in Production, atomic stock reservation under concurrency, and the Stripe payment lifecycle (webhook idempotency, failed/cancelled/succeeded transitions, late-payment refunds, abandonment sweep) against real PostgreSQL. The Release build passes with `/warnaserror`, and the current transitive NuGet vulnerability scan reports no vulnerable packages.
+| Suite | Tests |
+|-------|-------|
+| Unit tests | 389 |
+| Integration tests | 63 (HTTP and real PostgreSQL) |
 
-| Project | Count | Coverage areas |
-|---------|-------|----------------|
-| `SecureShop.UnitTests` | 362 | Domain entities, account lockout, pagination bounds, Stripe payment/webhook behavior including lifecycle branches, controllers, middleware, antiforgery handling, validators, and Razor Page models |
-| `SecureShop.IntegrationTests` | 14 | `/health`, production authentication-cookie settings, Swagger unavailability, CSP directives, pagination response, stock-reservation concurrency, and Stripe payment lifecycle scenarios against real PostgreSQL |
+Database-backed tests (stock concurrency, webhook idempotency, payment lifecycle, abandonment sweep) need a disposable PostgreSQL database. A safety guard refuses to run them unless the database name ends with `_test` and the host is not a known production/Railway host — point `SECURESHOP_TEST_DATABASE_URL` only at throwaway databases:
+
+```powershell
+$env:SECURESHOP_TEST_DATABASE_URL="Host=...;Database=secureshop_test;Username=...;Password=...;SSL Mode=Require"
+dotnet test SecureShop.IntegrationTests
+```
+
+In CI these tests run against a PostgreSQL service container, and the build fails if the variable is missing. Never point this variable at a production database.
+
+Stripe API calls are exercised against fakes in automated tests. Confirm the real flow with the Stripe CLI (`stripe listen`) and a test payment.
+
+## CI/CD and Deployment
+
+**CI (GitHub Actions):** restore, build with warnings as errors, then unit and integration tests against a PostgreSQL 16 service container.
+
+**Hosting:** the app runs on Railway and the database on Neon. Use the same region for both where possible.
+
+Deployment checklist:
+
+1. Create a Neon database and copy the direct connection string (pooling off) in Npgsql format.
+2. In Railway, set the variables from [Configuration](#configuration). Variable names are case-sensitive and use a double underscore.
+3. In Stripe (test mode), add a webhook endpoint at `https://<your-domain>/api/webhooks/stripe` for `payment_intent.succeeded`, `payment_intent.payment_failed`, and `payment_intent.canceled`, then set its signing secret as `Stripe__WebhookSecret`.
+4. Enable Wait for CI in Railway so a failing build cannot deploy.
+5. Deploy, then check `/health` and place a test order.
+
+## Known Limitations
+
+This project is not approved for live payments.
+
+- **Payments:** no admin-initiated refunds, no tax handling, and no live-mode support
+- **Checkout data:** shipping and contact details are collected but not yet saved with the order
+- **Operations:** SMTP over TLS needs validation, readiness checks for the database are not implemented, and migrations run at application startup rather than as a separate release step
+- **Data Protection keys** are stored unencrypted in the database; add key protection before real customers
+- **Runtime:** .NET 8 reaches end of support on 10 November 2026. An upgrade to .NET 10 is in progress in a separate pull request
+- **Admin 2FA is opt-in:** admins who have not enrolled a TOTP key sign in with password only
+
+## Roadmap
+
+- [ ] Persist shipping and contact details on orders
+- [ ] Admin-initiated refunds
+- [ ] Tax handling (for example Stripe Tax)
+- [ ] Database readiness checks
+- [ ] Migrations as a release step
+- [ ] Encrypted Data Protection keys
+- [ ] Enforce admin 2FA enrollment (currently opt-in)
+- [ ] Upgrade to .NET 10
+- [ ] Docker support
+
+## License
+
+Add a `LICENSE` file before publishing. MIT is a common choice for portfolio projects.
 
 ---
 
-## Code documentation
-
-All public classes, interfaces, methods, and properties carry XML documentation comments (`/// <summary>`). This includes:
-
-- **Domain** — `Product`, `Order`, `OrderItem`, `ApplicationUser`, `OrderStatus`, `DomainException`
-- **Application** — `IAuthService`, `IProductRepository`, `IOrderRepository`, `ICacheService`, `IEmailService`, `IPaymentService`, `ProductService`, `OrderService`, all DTOs, `RegisterValidator`, `CreateProductValidator`
-- **Infrastructure** — `AppDbContext`, `AppDbContextFactory`, `AuthService`, `CacheService`, `NullCacheService`, `EmailService`, `PaymentService`, `ProductRepository`, `OrderRepository`, `DependencyInjection`
-- **API** — `AuthController`, `ProductsController`, `OrdersController`, `AdminPageModel`, all admin and account page models, `GlobalExceptionMiddleware`, `SecurityHeadersMiddleware`, `CacheBustingMiddleware`, `JwtCookieHelper`
-
-XML doc comments are compatible with tools like DocFX and Swagger/OpenAPI enrichment.
+Built by Sourav · [GitHub](https://github.com/souravdas090300/SecureShop)

@@ -97,6 +97,10 @@ public class StripePaymentLifecycleTests
                     "SECURESHOP_TEST_DATABASE_URL is not set; payment lifecycle tests cannot be skipped in CI.");
             throw new InvalidOperationException("SECURESHOP_TEST_DATABASE_URL is not set.");
         }
+
+        // Refuse production-looking targets before the host (and its startup
+        // migrations) ever connects.
+        SecureShop.Infrastructure.TestDatabaseGuard.EnsureSafeTestConnectionString(_connectionString);
     }
 
     private static async Task<(Guid ProductId, string UserId)> SeedCatalogAsync(
