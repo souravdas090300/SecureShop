@@ -73,3 +73,7 @@ SecureShop.API/App_Data/
 
 # C# Dev Kit / language-service caches (regenerated automatically)
 *.lscache
+
+# Local throwaway test Postgres cluster
+.pgtest-data/
+.pgtest.log
