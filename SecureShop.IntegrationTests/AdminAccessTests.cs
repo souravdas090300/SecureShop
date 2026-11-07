@@ -24,6 +24,11 @@ namespace SecureShop.IntegrationTests;
 /// swapped to ephemeral file storage in the factory), so no database or real
 /// login is required — authorization runs before handlers.
 /// </summary>
+// All integration test classes share one collection: they mutate the
+// process-wide ConnectionStrings__DefaultConnection env var while building
+// their hosts, so parallel collections can hand a factory the wrong
+// connection string.
+[Collection("SecureShopDatabase")]
 public class AdminAccessTests : IClassFixture<WebApplicationFactory<Program>>
 {
     private const string AdminCookieName = ".SecureShop.Admin";
