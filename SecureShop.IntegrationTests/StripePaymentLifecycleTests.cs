@@ -21,6 +21,9 @@ namespace SecureShop.IntegrationTests;
 /// payment refunds, and the abandonment sweep. Requires
 /// SECURESHOP_TEST_DATABASE_URL; fails in CI when it is missing.
 /// </summary>
+// DB-backed classes share one collection so their WebApplicationFactory
+// instances never migrate the same test database concurrently.
+[Collection("SecureShopDatabase")]
 public class StripePaymentLifecycleTests
 {
     private readonly string? _connectionString =
@@ -48,24 +51,30 @@ public class StripePaymentLifecycleTests
 
     private static async Task WaitForMigrationsAsync(IServiceProvider services)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(90);
-        while (DateTime.UtcNow < deadline)
+        // The app runs MigrateAsync in a background task and signals completion
+        // (success or failure) via MigrationCompletedSignal. Wait for that
+        // first so a failed migration fails fast instead of polling for 90s.
+        var signal = services.GetRequiredService<MigrationCompletedSignal>();
+        try
         {
-            try
-            {
-                using var scope = services.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                var pending = await db.Database.GetPendingMigrationsAsync();
-                if (!pending.Any())
-                    return;
-            }
-            catch
-            {
-                // History table not created yet or DB still waking up — retry.
-            }
-            await Task.Delay(1000);
+            await signal.Completion.WaitAsync(TimeSpan.FromSeconds(120));
         }
-        throw new TimeoutException("Database migrations did not complete in time.");
+        catch (TimeoutException)
+        {
+            throw new TimeoutException("Startup database migration did not finish within 120s.");
+        }
+
+        // The signal also completes when migration failed — verify the schema
+        // is actually current before letting the test touch it.
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var pending = await db.Database.GetPendingMigrationsAsync();
+        if (pending.Any())
+        {
+            throw new InvalidOperationException(
+                "Startup migration did not apply all migrations. Pending: " +
+                string.Join(", ", pending));
+        }
     }
 
     /// <summary>Prepares the factory: starts the host, waits for migrations, returns it ready for use.</summary>

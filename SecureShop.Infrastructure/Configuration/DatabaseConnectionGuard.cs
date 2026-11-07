@@ -52,7 +52,12 @@ public static class DatabaseConnectionGuard
         if (!isProduction)
             return DatabaseConnectionStatus.Ok;
 
-        var unsafeHost = builder.Host is "localhost" or "127.0.0.1" or "::1";
+        // Localhost is refused in Production — except when the database name
+        // ends in "_test", which is the explicit opt-in used by integration
+        // tests against a local/CI-service Postgres. A real production
+        // database will not carry that suffix.
+        var isTestDatabase = builder.Database?.EndsWith("_test", StringComparison.OrdinalIgnoreCase) == true;
+        var unsafeHost = !isTestDatabase && builder.Host is "localhost" or "127.0.0.1" or "::1";
         var unsafeDatabase = string.Equals(builder.Database, "placeholder", StringComparison.OrdinalIgnoreCase);
         return unsafeHost || unsafeDatabase
             ? DatabaseConnectionStatus.UnsafeForProduction

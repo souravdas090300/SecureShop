@@ -10,6 +10,11 @@ using Microsoft.Extensions.Options;
 
 namespace SecureShop.IntegrationTests;
 
+// All integration test classes share one collection: they mutate the
+// process-wide ConnectionStrings__DefaultConnection env var while building
+// their hosts, so parallel collections can hand a factory the wrong
+// connection string.
+[Collection("SecureShopDatabase")]
 public class HealthEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly WebApplicationFactory<Program> _factory;

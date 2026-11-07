@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using SecureShop.API.Services;
 using SecureShop.Application.DTOs.Orders;
 using SecureShop.Application.Interfaces;
 using SecureShop.Application.Services;
@@ -21,6 +22,9 @@ namespace SecureShop.IntegrationTests;
 /// Set SECURESHOP_TEST_DATABASE_URL to a disposable test database connection
 /// string; the test is skipped when it is not configured.
 /// </summary>
+// DB-backed classes share one collection so their WebApplicationFactory
+// instances never migrate the same test database concurrently.
+[Collection("SecureShopDatabase")]
 public class OrderStockConcurrencyTests
 {
     private readonly string? _connectionString =
@@ -142,24 +146,30 @@ public class OrderStockConcurrencyTests
 
     private static async Task WaitForMigrationsAsync(IServiceProvider services)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(90);
-        while (DateTime.UtcNow < deadline)
+        // The app runs MigrateAsync in a background task and signals completion
+        // (success or failure) via MigrationCompletedSignal. Wait for that
+        // first so a failed migration fails fast instead of polling for 90s.
+        var signal = services.GetRequiredService<MigrationCompletedSignal>();
+        try
         {
-            try
-            {
-                using var scope = services.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                var pending = await db.Database.GetPendingMigrationsAsync();
-                if (!pending.Any())
-                    return;
-            }
-            catch
-            {
-                // History table not created yet or DB still waking up — retry.
-            }
-            await Task.Delay(1000);
+            await signal.Completion.WaitAsync(TimeSpan.FromSeconds(120));
         }
-        throw new TimeoutException("Database migrations did not complete in time.");
+        catch (TimeoutException)
+        {
+            throw new TimeoutException("Startup database migration did not finish within 120s.");
+        }
+
+        // The signal also completes when migration failed — verify the schema
+        // is actually current before letting the test touch it.
+        using var scope = services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var pending = await db.Database.GetPendingMigrationsAsync();
+        if (pending.Any())
+        {
+            throw new InvalidOperationException(
+                "Startup migration did not apply all migrations. Pending: " +
+                string.Join(", ", pending));
+        }
     }
 
 }
