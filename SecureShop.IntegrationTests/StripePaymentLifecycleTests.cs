@@ -21,6 +21,9 @@ namespace SecureShop.IntegrationTests;
 /// payment refunds, and the abandonment sweep. Requires
 /// SECURESHOP_TEST_DATABASE_URL; fails in CI when it is missing.
 /// </summary>
+// DB-backed classes share one collection so their WebApplicationFactory
+// instances never migrate the same test database concurrently.
+[Collection("SecureShopDatabase")]
 public class StripePaymentLifecycleTests
 {
     private readonly string? _connectionString =

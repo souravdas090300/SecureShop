@@ -21,6 +21,9 @@ namespace SecureShop.IntegrationTests;
 /// Set SECURESHOP_TEST_DATABASE_URL to a disposable test database connection
 /// string; the test is skipped when it is not configured.
 /// </summary>
+// DB-backed classes share one collection so their WebApplicationFactory
+// instances never migrate the same test database concurrently.
+[Collection("SecureShopDatabase")]
 public class OrderStockConcurrencyTests
 {
     private readonly string? _connectionString =
