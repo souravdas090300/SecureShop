@@ -22,6 +22,7 @@
                     <form method="post" id="checkoutForm">
                         @if (string.IsNullOrEmpty(Model.PaymentClientSecret))
                         {
+                            <!-- STEP 1: SHIPPING DETAILS -->
                             <div class="row">
                                 <div class="col-md-6 mb-3">
                                     <label for="firstName" class="form-label">First Name *</label>
@@ -32,7 +33,6 @@
                                     <input type="text" class="form-control" id="lastName" asp-for="LastName" required>
                                 </div>
                             </div>
-
                             <div class="mb-3">
                                 <label for="email" class="form-label">Email Address *</label>
                                 <input type="email" class="form-control" id="email" asp-for="Email" required>
@@ -80,6 +80,7 @@
                         }
                         else
                         {
+                            <!-- STEP 2: STRIPE PAYMENT -->
                             <div class="alert alert-info">
                                 Test-mode checkout only. No tax is collected. Do not use live payment keys.
                             </div>
@@ -91,7 +92,7 @@
                                 </button>
                             </div>
                             <p class="small text-muted mt-3 mb-0">
-                                Order #@Model.OrderId will remain unpaid until Stripe confirms it. Do not fulfill it before its status is Paid.
+                                Order #@Model.OrderId will remain unpaid until Stripe confirms it.
                             </p>
                         }
                     </form>
@@ -180,49 +181,65 @@
 
         document.addEventListener('DOMContentLoaded', async function () {
             loadCart();
+
             const checkoutForm = document.getElementById('checkoutForm');
-            checkoutForm?.addEventListener('submit', function (event) {
-                const cart = JSON.parse(localStorage.getItem('cart') || '[]');
-                const items = cart.map(item => ({ productId: item.id, quantity: item.quantity }));
-                document.getElementById('cartItemsJsonInput').value = JSON.stringify(items);
-                if (items.length === 0) {
-                    event.preventDefault();
-                    alert('Your cart is empty. Please add items before checking out.');
-                    return;
-                }
+            if (checkoutForm) {
+                checkoutForm.addEventListener('submit', function (event) {
+                    const cart = JSON.parse(localStorage.getItem('cart') || '[]');
+                    const items = cart.map(item => ({ productId: item.id, quantity: item.quantity }));
+                    document.getElementById('cartItemsJsonInput').value = JSON.stringify(items);
+                    
+                    if (items.length === 0) {
+                        event.preventDefault();
+                        alert('Your cart is empty. Please add items before checking out.');
+                        return;
+                    }
 
-                const button = document.getElementById('placeOrderBtn');
-                button.disabled = true;
-                button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating secure payment...';
-            });
+                    const button = document.getElementById('placeOrderBtn');
+                    if(button) {
+                        button.disabled = true;
+                        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating secure payment...';
+                    }
+                });
+            }
 
-            const paymentElement = document.getElementById('payment-element');
-            if (!paymentElement) return;
+            const paymentElementDiv = document.getElementById('payment-element');
+            if (!paymentElementDiv) return;
 
+            // STEP 2: STRIPE JS INITIALIZATION
             const stripe = Stripe(@Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.StripePublishableKey)));
             const elements = stripe.elements({
                 clientSecret: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.PaymentClientSecret))
             });
-            elements.create('payment').mount('#payment-element');
+            
+            const paymentElement = elements.create('payment');
+            paymentElement.mount('#payment-element');
 
-            document.getElementById('confirmPaymentBtn').addEventListener('click', async function () {
-                const button = this;
-                const message = document.getElementById('payment-message');
-                button.disabled = true;
-                message.classList.add('d-none');
-                const result = await stripe.confirmPayment({
-                    elements,
-                    confirmParams: { return_url: `${window.location.origin}/Account/Orders` },
-                    redirect: 'if_required'
+            const confirmBtn = document.getElementById('confirmPaymentBtn');
+            if (confirmBtn) {
+                confirmBtn.addEventListener('click', async function () {
+                    const button = this;
+                    const message = document.getElementById('payment-message');
+                    button.disabled = true;
+                    message.classList.add('d-none');
+                    
+                    const result = await stripe.confirmPayment({
+                        elements,
+                        confirmParams: { return_url: `${window.location.origin}/Account/Orders` },
+                        redirect: 'if_required'
+                    });
+                    
+                    if (result.error) {
+                        message.textContent = result.error.message || 'Payment could not be completed. Check your payment details and try again.';
+                        message.classList.remove('d-none');
+                        button.disabled = false;
+                    } else {
+                        // Clear cart and redirect on success
+                        localStorage.removeItem('cart');
+                        window.location.assign('/Account/Orders');
+                    }
                 });
-                if (result.error) {
-                    message.textContent = result.error.message || 'Payment could not be completed. Check your payment details and try again.';
-                    message.classList.remove('d-none');
-                    button.disabled = false;
-                } else {
-                    window.location.assign('/Account/Orders');
-                }
-            });
+            }
         });
     </script>
 }
