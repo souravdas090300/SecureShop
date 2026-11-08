@@ -17,11 +17,12 @@ RUN dotnet restore
 # Copy all source code
 COPY . .
 
+# Publish the API project (implicit restore ensures its closure is complete —
+# running this after `dotnet test` hit NETSDK1064 on a transitive analyzer)
+RUN dotnet publish SecureShop.API --configuration Release --output /app/publish
+
 # Run tests
 RUN dotnet test SecureShop.UnitTests --no-restore --configuration Release --verbosity minimal
-
-# Publish the API project
-RUN dotnet publish SecureShop.API --no-restore --configuration Release --output /app/publish
 
 # ── Stage 2: Runtime ─────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime

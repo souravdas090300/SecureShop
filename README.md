@@ -290,14 +290,15 @@ dotnet test SecureShop.sln -c Release
 | Unit tests | 389 |
 | Integration tests | 63 (HTTP and real PostgreSQL) |
 
-Database-backed tests (stock concurrency, webhook idempotency, payment lifecycle, abandonment sweep) need a disposable PostgreSQL database. A safety guard refuses to run them unless the database name ends with `_test` and the host is not a known production/Railway host — point `SECURESHOP_TEST_DATABASE_URL` only at throwaway databases:
+Database-backed tests (stock concurrency, webhook idempotency, payment lifecycle, abandonment sweep) need a disposable PostgreSQL database. They are clearly skipped locally when `SECURESHOP_TEST_DATABASE_URL` is unset, but fail in CI if the URL is missing. A safety guard refuses databases whose names do not end with `_test` or whose hosts appear in the comma-separated `SECURESHOP_FORBIDDEN_DB_HOSTS` environment variable — point `SECURESHOP_TEST_DATABASE_URL` only at throwaway databases:
 
 ```powershell
 $env:SECURESHOP_TEST_DATABASE_URL="Host=...;Database=secureshop_test;Username=...;Password=...;SSL Mode=Require"
+$env:SECURESHOP_FORBIDDEN_DB_HOSTS="production-host.example,another-production-host.example"
 dotnet test SecureShop.IntegrationTests
 ```
 
-In CI these tests run against a PostgreSQL service container, and the build fails if the variable is missing. Never point this variable at a production database.
+In CI these tests run against a PostgreSQL service container, and the build fails if the URL is missing. DB-less admin/health HTTP tests disable startup database migration/seeding and the abandonment background service. Never point the test URL at a production database.
 
 Stripe API calls are exercised against fakes in automated tests. Confirm the real flow with the Stripe CLI (`stripe listen`) and a test payment.
 

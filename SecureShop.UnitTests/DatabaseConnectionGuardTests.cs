@@ -47,6 +47,17 @@ public class DatabaseConnectionGuardTests
             .Should().Be(DatabaseConnectionStatus.UnsafeForProduction);
     }
 
+    [Theory]
+    [InlineData("Host=localhost;Database=secureshop_test;Username=u;Password=p")]
+    [InlineData("Host=127.0.0.1;Port=5432;Database=shop_test;Username=u;Password=p;SSL Mode=Disable")]
+    public void Evaluate_Production_WithLocalhostTestDatabase_ReturnsOk(string connStr)
+    {
+        // Explicit opt-in: a *_test database on localhost is allowed so
+        // integration tests can run against a local or CI-service Postgres.
+        DatabaseConnectionGuard.Evaluate(connStr, isProduction: true)
+            .Should().Be(DatabaseConnectionStatus.Ok);
+    }
+
     [Fact]
     public void Evaluate_Production_WithDatabaseNamedPlaceholder_ReturnsUnsafe()
     {

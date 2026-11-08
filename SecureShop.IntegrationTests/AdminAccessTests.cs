@@ -24,6 +24,9 @@ namespace SecureShop.IntegrationTests;
 /// swapped to ephemeral file storage in the factory), so no database or real
 /// login is required — authorization runs before handlers.
 /// </summary>
+// The collection also serializes these DB-less host checks against tests that
+// temporarily set the process-wide test connection string.
+[Collection("SecureShopDatabase")]
 public class AdminAccessTests : IClassFixture<WebApplicationFactory<Program>>
 {
     private const string AdminCookieName = ".SecureShop.Admin";
@@ -33,43 +36,46 @@ public class AdminAccessTests : IClassFixture<WebApplicationFactory<Program>>
 
     public AdminAccessTests(WebApplicationFactory<Program> factory)
     {
-        // appsettings.json ships an empty DefaultConnection that wins over
-        // in-memory config, so the Production DB guard needs the env var —
-        // same workaround as OrderStockConcurrencyTests. Restored as soon as
-        // the host has consumed it.
-        var previous = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
+        var previousConnectionString =
+            Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
+        var previousDisableStartupTasks =
+            Environment.GetEnvironmentVariable("Testing__DisableStartupDatabaseTasks");
         Environment.SetEnvironmentVariable(
             "ConnectionStrings__DefaultConnection",
-            "Host=unused.invalid;Database=x;Username=u;Password=p;SSL Mode=Require");
+            "Host=localhost;Port=5432;Database=secureshop_test;Username=test;Password=test");
+        Environment.SetEnvironmentVariable("Testing__DisableStartupDatabaseTasks", "true");
         try
         {
-            _factory = factory.WithWebHostBuilder(builder =>
-            {
-                builder.UseEnvironment(Environments.Production);
-                builder.ConfigureAppConfiguration((_, configuration) =>
-                    configuration.AddInMemoryCollection(new Dictionary<string, string?>
-                    {
-                        ["Jwt:Secret"] = "integration-test-secret-that-is-long-enough",
-                        ["Jwt:Issuer"] = "SecureShop.Tests",
-                        ["Jwt:Audience"] = "SecureShop.Tests"
-                    }));
-                builder.ConfigureServices(services =>
+        _factory = factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment(Environments.Production);
+            builder.ConfigureAppConfiguration((_, configuration) =>
+                configuration.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    // Production persists DP keys to Postgres (unreachable here).
-                    // Swap in ephemeral file-system keys so forged test cookies
-                    // decrypt correctly without a database.
-                    services.RemoveAll<IXmlRepository>();
-                    services.AddDataProtection()
-                        .SetApplicationName("SecureShop.AdminAccessTests")
-                        .PersistKeysToFileSystem(new DirectoryInfo(
-                            Path.Combine(Path.GetTempPath(), $"dp-keys-{Guid.NewGuid():N}")));
-                });
+                    ["Jwt:Secret"] = "integration-test-secret-that-is-long-enough",
+                    ["Jwt:Issuer"] = "SecureShop.Tests",
+                    ["Jwt:Audience"] = "SecureShop.Tests",
+                    ["ConnectionStrings:DefaultConnection"] =
+                        "Host=localhost;Port=5432;Database=secureshop_test;Username=test;Password=test",
+                    ["Testing:DisableStartupDatabaseTasks"] = "true"
+                }));
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IHostedService>();
+                // Production persists DP keys to Postgres. Use temporary file storage for forged cookies.
+                services.RemoveAll<IXmlRepository>();
+                services.AddDataProtection()
+                    .SetApplicationName("SecureShop.AdminAccessTests")
+                    .PersistKeysToFileSystem(new DirectoryInfo(
+                        Path.Combine(Path.GetTempPath(), $"dp-keys-{Guid.NewGuid():N}")));
             });
-            _ = _factory.Services; // force host build so the env var is consumed
+        });
+        _ = _factory.Services;
         }
         finally
         {
-            Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", previous);
+            Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", previousConnectionString);
+            Environment.SetEnvironmentVariable("Testing__DisableStartupDatabaseTasks", previousDisableStartupTasks);
         }
     }
 
