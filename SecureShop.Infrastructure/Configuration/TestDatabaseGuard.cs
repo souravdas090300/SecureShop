@@ -5,28 +5,19 @@ namespace SecureShop.Infrastructure;
 /// <summary>
 /// Safety guard for database-backed integration tests. Before any test
 /// connects, <see cref="EnsureSafeTestConnectionString"/> requires the target
-/// database name to end with "_test" and rejects hosts known to belong to
-/// production/Railway, so a misconfigured SECURESHOP_TEST_DATABASE_URL can
-/// never run migrations or writes against a real database.
+/// database name to end with "_test" and rejects hosts listed in
+/// <see cref="ForbiddenHostsVariable"/>, so a misconfigured
+/// SECURESHOP_TEST_DATABASE_URL cannot target a configured production host.
 /// </summary>
 public static class TestDatabaseGuard
 {
     /// <summary>Environment variable with extra comma-separated forbidden hosts.</summary>
     public const string ForbiddenHostsVariable = "SECURESHOP_FORBIDDEN_DB_HOSTS";
 
-    // Hosts that must never receive integration-test writes. Keep in sync with
-    // the deployed environment; additional hosts can be supplied at runtime via
-    // SECURESHOP_FORBIDDEN_DB_HOSTS (comma-separated).
-    private static readonly string[] BuiltInForbiddenHosts =
-    {
-        // Production Neon endpoint used by the Railway deployment.
-        "ep-snowy-paper-agsz6ldf.c-2.eu-central-1.aws.neon.tech",
-    };
-
     /// <summary>
     /// Throws <see cref="InvalidOperationException"/> unless the connection
     /// string targets a database whose name ends with "_test" on a host that
-    /// is not a known production/Railway host.
+    /// is not listed in <c>SECURESHOP_FORBIDDEN_DB_HOSTS</c>.
     /// </summary>
     public static void EnsureSafeTestConnectionString(string? connectionString)
     {
@@ -54,9 +45,8 @@ public static class TestDatabaseGuard
                 "disposable test database.");
         }
 
-        var forbiddenHosts = BuiltInForbiddenHosts
-            .Concat((Environment.GetEnvironmentVariable(ForbiddenHostsVariable) ?? string.Empty)
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        var forbiddenHosts = (Environment.GetEnvironmentVariable(ForbiddenHostsVariable) ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         // Npgsql allows a comma-separated host list for failover — check each.

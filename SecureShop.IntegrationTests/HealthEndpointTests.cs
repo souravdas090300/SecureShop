@@ -1,19 +1,19 @@
-﻿using System.Net;
+using System.Net;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using SecureShop.API.Services;
 
 namespace SecureShop.IntegrationTests;
 
-// All integration test classes share one collection: they mutate the
-// process-wide ConnectionStrings__DefaultConnection env var while building
-// their hosts, so parallel collections can hand a factory the wrong
-// connection string.
+// The collection also serializes these DB-less host checks against tests that
+// temporarily set the process-wide test connection string.
 [Collection("SecureShopDatabase")]
 public class HealthEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 {
@@ -22,31 +22,37 @@ public class HealthEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 
     public HealthEndpointTests(WebApplicationFactory<Program> factory)
     {
-        // appsettings.json ships an empty DefaultConnection that wins over
-        // in-memory config, so the Production DB guard needs the env var.
-        // Restored as soon as the host has consumed it.
-        var previous = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
+        var previousConnectionString =
+            Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
+        var previousDisableStartupTasks =
+            Environment.GetEnvironmentVariable("Testing__DisableStartupDatabaseTasks");
         Environment.SetEnvironmentVariable(
             "ConnectionStrings__DefaultConnection",
-            "Host=unused.invalid;Database=x;Username=u;Password=p;SSL Mode=Require");
+            "Host=localhost;Port=5432;Database=secureshop_test;Username=test;Password=test");
+        Environment.SetEnvironmentVariable("Testing__DisableStartupDatabaseTasks", "true");
         try
         {
-            _factory = factory.WithWebHostBuilder(builder =>
-            {
-                builder.UseEnvironment(Environments.Production);
-                builder.ConfigureAppConfiguration((_, configuration) =>
-                    configuration.AddInMemoryCollection(new Dictionary<string, string?>
-                    {
-                        ["Jwt:Secret"] = "integration-test-secret-that-is-long-enough",
-                        ["Jwt:Issuer"] = "SecureShop.Tests",
-                        ["Jwt:Audience"] = "SecureShop.Tests"
-                    }));
-            });
-            _client = _factory.CreateClient(); // force host build so the env var is consumed
+        _factory = factory.WithWebHostBuilder(builder =>
+        {
+            builder.UseEnvironment(Environments.Production);
+            builder.ConfigureAppConfiguration((_, configuration) =>
+                configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Jwt:Secret"] = "integration-test-secret-that-is-long-enough",
+                    ["Jwt:Issuer"] = "SecureShop.Tests",
+                    ["Jwt:Audience"] = "SecureShop.Tests",
+                    ["ConnectionStrings:DefaultConnection"] =
+                        "Host=localhost;Port=5432;Database=secureshop_test;Username=test;Password=test",
+                    ["Testing:DisableStartupDatabaseTasks"] = "true"
+                }));
+            builder.ConfigureServices(services => services.RemoveAll<IHostedService>());
+        });
+        _client = _factory.CreateClient();
         }
         finally
         {
-            Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", previous);
+            Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", previousConnectionString);
+            Environment.SetEnvironmentVariable("Testing__DisableStartupDatabaseTasks", previousDisableStartupTasks);
         }
     }
 
@@ -56,6 +62,16 @@ public class HealthEndpointTests : IClassFixture<WebApplicationFactory<Program>>
         var response = await _client.GetAsync("/health");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public void DbLessHost_DisablesStartupDatabaseTasksAndAbandonmentService()
+    {
+        var migrationSignal = _factory.Services.GetRequiredService<MigrationCompletedSignal>();
+        var hostedServices = _factory.Services.GetServices<IHostedService>();
+
+        Assert.True(migrationSignal.Completion.IsCompleted);
+        Assert.DoesNotContain(hostedServices, service => service is OrderAbandonmentService);
     }
 
     [Fact]

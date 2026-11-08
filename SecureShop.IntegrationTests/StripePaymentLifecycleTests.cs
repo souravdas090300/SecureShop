@@ -19,7 +19,8 @@ namespace SecureShop.IntegrationTests;
 /// End-to-end payment lifecycle tests against real PostgreSQL: webhook
 /// idempotency, atomic order transitions, exactly-once stock restore, late
 /// payment refunds, and the abandonment sweep. Requires
-/// SECURESHOP_TEST_DATABASE_URL; fails in CI when it is missing.
+/// SECURESHOP_TEST_DATABASE_URL; these tests are skipped locally when it is
+/// missing and fail in CI rather than silently skipping.
 /// </summary>
 // DB-backed classes share one collection so their WebApplicationFactory
 // instances never migrate the same test database concurrently.
@@ -49,40 +50,13 @@ public class StripePaymentLifecycleTests
             });
         });
 
-    private static async Task WaitForMigrationsAsync(IServiceProvider services)
-    {
-        // The app runs MigrateAsync in a background task and signals completion
-        // (success or failure) via MigrationCompletedSignal. Wait for that
-        // first so a failed migration fails fast instead of polling for 90s.
-        var signal = services.GetRequiredService<MigrationCompletedSignal>();
-        try
-        {
-            await signal.Completion.WaitAsync(TimeSpan.FromSeconds(120));
-        }
-        catch (TimeoutException)
-        {
-            throw new TimeoutException("Startup database migration did not finish within 120s.");
-        }
-
-        // The signal also completes when migration failed — verify the schema
-        // is actually current before letting the test touch it.
-        using var scope = services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var pending = await db.Database.GetPendingMigrationsAsync();
-        if (pending.Any())
-        {
-            throw new InvalidOperationException(
-                "Startup migration did not apply all migrations. Pending: " +
-                string.Join(", ", pending));
-        }
-    }
-
     /// <summary>Prepares the factory: starts the host, waits for migrations, returns it ready for use.</summary>
     private async Task<WebApplicationFactory<Program>> StartFactoryAsync()
     {
-        RequireConnectionString();
+        var connectionString = TestDatabaseHelpers.RequireConnectionString(_connectionString);
+        SecureShop.Infrastructure.TestDatabaseGuard.EnsureSafeTestConnectionString(connectionString);
         var previous = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
-        Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", _connectionString);
+        Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", connectionString);
         WebApplicationFactory<Program> factory;
         try
         {
@@ -93,23 +67,8 @@ public class StripePaymentLifecycleTests
         {
             Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", previous);
         }
-        await WaitForMigrationsAsync(factory.Services);
+        await TestDatabaseHelpers.WaitForMigrationsAsync(factory.Services);
         return factory;
-    }
-
-    private void RequireConnectionString()
-    {
-        if (string.IsNullOrWhiteSpace(_connectionString))
-        {
-            if (Environment.GetEnvironmentVariable("CI") == "true")
-                throw new InvalidOperationException(
-                    "SECURESHOP_TEST_DATABASE_URL is not set; payment lifecycle tests cannot be skipped in CI.");
-            throw new InvalidOperationException("SECURESHOP_TEST_DATABASE_URL is not set.");
-        }
-
-        // Refuse production-looking targets before the host (and its startup
-        // migrations) ever connects.
-        SecureShop.Infrastructure.TestDatabaseGuard.EnsureSafeTestConnectionString(_connectionString);
     }
 
     private static async Task<(Guid ProductId, string UserId)> SeedCatalogAsync(
@@ -187,7 +146,7 @@ public class StripePaymentLifecycleTests
 
     // ─── Tests ────────────────────────────────────────────────────────────────
 
-    [Fact]
+    [DatabaseFact]
     public async Task CanceledEvent_DeliveredTwice_RestoresStockExactlyOnce()
     {
         await using var factory = await StartFactoryAsync();
@@ -204,7 +163,7 @@ public class StripePaymentLifecycleTests
         Assert.Equal(10, await GetStockAsync(factory, productId)); // restored once, not twice
     }
 
-    [Fact]
+    [DatabaseFact]
     public async Task CanceledEvent_ParallelDeliveries_RestoreStockExactlyOnce()
     {
         await using var factory = await StartFactoryAsync();
@@ -221,7 +180,7 @@ public class StripePaymentLifecycleTests
         Assert.Equal(10, await GetStockAsync(factory, productId));
     }
 
-    [Fact]
+    [DatabaseFact]
     public async Task PaymentFailed_KeepsReservationAndRecordsFailure()
     {
         await using var factory = await StartFactoryAsync();
@@ -237,7 +196,7 @@ public class StripePaymentLifecycleTests
         Assert.Equal(8, await GetStockAsync(factory, productId)); // reservation kept
     }
 
-    [Fact]
+    [DatabaseFact]
     public async Task CanceledEvent_ForPaidOrder_IsIgnored()
     {
         await using var factory = await StartFactoryAsync();
@@ -252,7 +211,7 @@ public class StripePaymentLifecycleTests
         Assert.Equal(8, await GetStockAsync(factory, productId)); // stock stays reserved for fulfilment
     }
 
-    [Fact]
+    [DatabaseFact]
     public async Task SucceededEvent_ForCancelledOrder_RefundsLatePayment()
     {
         await using var factory = await StartFactoryAsync();
@@ -271,7 +230,7 @@ public class StripePaymentLifecycleTests
         Assert.Contains(fake.Refunds, r => r.IntentId == intentId);
     }
 
-    [Fact]
+    [DatabaseFact]
     public async Task PaymentFailed_AfterSucceeded_DoesNotTouchPaidOrder()
     {
         await using var factory = await StartFactoryAsync();
@@ -289,7 +248,7 @@ public class StripePaymentLifecycleTests
         Assert.Equal(8, await GetStockAsync(factory, productId));
     }
 
-    [Fact]
+    [DatabaseFact]
     public async Task SucceededEvent_RefundFailure_RollsBackEventClaimForRetry()
     {
         await using var factory = await StartFactoryAsync();
@@ -331,7 +290,7 @@ public class StripePaymentLifecycleTests
         return await db.ProcessedStripeEvents.AnyAsync(e => e.EventId == eventId);
     }
 
-    [Fact]
+    [DatabaseFact]
     public async Task SucceededEvent_MarksPaymentProcessingOrderPaid()
     {
         await using var factory = await StartFactoryAsync();
@@ -348,7 +307,7 @@ public class StripePaymentLifecycleTests
         Assert.Equal(8, await GetStockAsync(factory, productId));
     }
 
-    [Fact]
+    [DatabaseFact]
     public async Task AbandonmentSweep_CancelsOnlyStaleUnpaidOrders()
     {
         await using var factory = await StartFactoryAsync();

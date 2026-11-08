@@ -37,8 +37,9 @@ jobs:
       - name: Integration tests (incl. stock concurrency test)
         run: dotnet test SecureShop.IntegrationTests/SecureShop.IntegrationTests.csproj --nologo
         env:
-          # The concurrency test throws in CI if this is unset, so the job
-          # fails rather than silently skipping.
+          CI: 'true'
+          SECURESHOP_FORBIDDEN_DB_HOSTS: ep-snowy-paper-agsz6ldf.c-2.eu-central-1.aws.neon.tech
+          # DB-backed facts skip locally without this URL and fail in CI if it is missing.
           SECURESHOP_TEST_DATABASE_URL: Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=secureshop_test;SSL Mode=Disable
 
       - name: Docker build

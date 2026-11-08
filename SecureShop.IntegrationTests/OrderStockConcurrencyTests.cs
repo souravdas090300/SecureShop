@@ -20,7 +20,8 @@ namespace SecureShop.IntegrationTests;
 /// Requires a real PostgreSQL database: EF Core's ExecuteUpdateAsync is not
 /// supported by the InMemory provider, and SQLite semantics differ.
 /// Set SECURESHOP_TEST_DATABASE_URL to a disposable test database connection
-/// string; the test is skipped when it is not configured.
+/// string. It is explicitly skipped locally when unconfigured, but fails in
+/// CI so the required database-backed concurrency check cannot be omitted.
 /// </summary>
 // DB-backed classes share one collection so their WebApplicationFactory
 // instances never migrate the same test database concurrently.
@@ -30,22 +31,14 @@ public class OrderStockConcurrencyTests
     private readonly string? _connectionString =
         Environment.GetEnvironmentVariable("SECURESHOP_TEST_DATABASE_URL");
 
-    [Fact]
+    [DatabaseFact]
     public async Task ConcurrentOrders_NeverOversell()
     {
-        if (string.IsNullOrWhiteSpace(_connectionString))
-        {
-            // In CI a missing connection string must fail loudly — a silent
-            // skip would let an overselling regression ship undetected.
-            if (Environment.GetEnvironmentVariable("CI") == "true")
-                throw new InvalidOperationException(
-                    "SECURESHOP_TEST_DATABASE_URL is not set; the stock concurrency test cannot be skipped in CI.");
-            return; // No test database configured — nothing to verify against.
-        }
+        var connectionString = TestDatabaseHelpers.RequireConnectionString(_connectionString);
 
         // Refuse production-looking targets before the host (and its startup
         // migrations) ever connects.
-        SecureShop.Infrastructure.TestDatabaseGuard.EnsureSafeTestConnectionString(_connectionString);
+        SecureShop.Infrastructure.TestDatabaseGuard.EnsureSafeTestConnectionString(connectionString);
 
         // appsettings.json ships "DefaultConnection": "" which would win over the
         // in-memory override below, so set the environment variable instead —
@@ -54,7 +47,7 @@ public class OrderStockConcurrencyTests
         // consumed it, to avoid leaking the test database into parallel tests.
         var previousConnectionString =
             Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
-        Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", _connectionString);
+        Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", connectionString);
 
         await using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
@@ -65,7 +58,7 @@ public class OrderStockConcurrencyTests
                     ["Jwt:Secret"] = "integration-test-secret-that-is-long-enough",
                     ["Jwt:Issuer"] = "SecureShop.Tests",
                     ["Jwt:Audience"] = "SecureShop.Tests",
-                    ["ConnectionStrings:DefaultConnection"] = _connectionString
+                    ["ConnectionStrings:DefaultConnection"] = connectionString
                 }));
             builder.ConfigureServices(services =>
             {
@@ -87,7 +80,7 @@ public class OrderStockConcurrencyTests
         {
             Environment.SetEnvironmentVariable("ConnectionStrings__DefaultConnection", previousConnectionString);
         }
-        await WaitForMigrationsAsync(factory.Services);
+        await TestDatabaseHelpers.WaitForMigrationsAsync(factory.Services);
 
         var userId = $"concurrency-{Guid.NewGuid():N}";
         Product product;
@@ -141,34 +134,6 @@ public class OrderStockConcurrencyTests
                 .Select(p => p.StockQuantity)
                 .SingleAsync();
             Assert.Equal(0, stock);
-        }
-    }
-
-    private static async Task WaitForMigrationsAsync(IServiceProvider services)
-    {
-        // The app runs MigrateAsync in a background task and signals completion
-        // (success or failure) via MigrationCompletedSignal. Wait for that
-        // first so a failed migration fails fast instead of polling for 90s.
-        var signal = services.GetRequiredService<MigrationCompletedSignal>();
-        try
-        {
-            await signal.Completion.WaitAsync(TimeSpan.FromSeconds(120));
-        }
-        catch (TimeoutException)
-        {
-            throw new TimeoutException("Startup database migration did not finish within 120s.");
-        }
-
-        // The signal also completes when migration failed — verify the schema
-        // is actually current before letting the test touch it.
-        using var scope = services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var pending = await db.Database.GetPendingMigrationsAsync();
-        if (pending.Any())
-        {
-            throw new InvalidOperationException(
-                "Startup migration did not apply all migrations. Pending: " +
-                string.Join(", ", pending));
         }
     }
 

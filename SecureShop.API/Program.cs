@@ -533,86 +533,95 @@ app.MapGet("/api/auth/status", (HttpContext context) =>
 // Railway health checks to fail while EF Core retries the connection.
 Log.Information("Startup init: finished, starting web host");
 
-_ = Task.Run(async () =>
+if (builder.Configuration.GetValue<bool>("Testing:DisableStartupDatabaseTasks"))
 {
-    try
-    {
-        await Task.Delay(2000); // give Kestrel a moment to bind
-        using var scope = app.Services.CreateScope();
-
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        await db.Database.MigrateAsync();
-        Log.Information("Startup init: database migration completed");
-
-        var roleManager = scope.ServiceProvider
-            .GetRequiredService<RoleManager<IdentityRole>>();
-
-        foreach (var role in new[] { "Admin", "Customer" })
-        {
-            if (!await roleManager.RoleExistsAsync(role))
-            {
-                await roleManager.CreateAsync(new IdentityRole(role));
-                Log.Information("Startup init: created role {Role}", role);
-            }
-        }
-
-        Log.Information("Startup init: role seeding completed");
-
-        var userManager = scope.ServiceProvider
-            .GetRequiredService<UserManager<ApplicationUser>>();
-        await BootstrapAdminProvisioner.ProvisionIfNeededAsync(
-            userManager,
-            bootstrapAdminCredentials,
-            app.Logger);
-
-    }
-    catch (Exception ex)
-    {
-        Log.Error(ex, "Startup init: migration/seeding failed — ensure ConnectionStrings__DefaultConnection is set in Railway env vars");
-    }
-
-    // Release DB-touching background services whether migration succeeded or
-    // failed — they handle database errors with their own retry logic.
+    Log.Information("Startup database migration and seeding disabled by test configuration");
     app.Services.GetRequiredService<SecureShop.API.Services.MigrationCompletedSignal>()
         .MarkCompleted();
-
-    // Product seeding runs in its own isolated try/catch so migration or role
-    // failures above cannot prevent the catalogue from being populated.
-    try
+}
+else
+{
+    _ = Task.Run(async () =>
     {
-        using var seedScope = app.Services.CreateScope();
-        var seedDb = seedScope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var existingCount = await seedDb.Set<SecureShop.Domain.Entities.Product>().CountAsync();
-        if (existingCount == 0)
+        try
         {
-            var seedProducts = new[]
+            await Task.Delay(2000); // give Kestrel a moment to bind
+            using var scope = app.Services.CreateScope();
+
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.Database.MigrateAsync();
+            Log.Information("Startup init: database migration completed");
+
+            var roleManager = scope.ServiceProvider
+                .GetRequiredService<RoleManager<IdentityRole>>();
+
+            foreach (var role in new[] { "Admin", "Customer" })
             {
-                SecureShop.Domain.Entities.Product.Create("Wireless Noise-Cancelling Headphones", "Premium over-ear headphones with active noise cancellation, 30-hour battery life and foldable design.", 89.99m, 50, "Electronics", null),
-                SecureShop.Domain.Entities.Product.Create("Mechanical Gaming Keyboard", "TKL mechanical keyboard with RGB backlighting, Cherry MX switches and USB-C connectivity.", 64.99m, 35, "Electronics", null),
-                SecureShop.Domain.Entities.Product.Create("Ergonomic Office Chair", "Adjustable lumbar support, breathable mesh back and armrests. Supports up to 120 kg.", 249.99m, 12, "Home", null),
-                SecureShop.Domain.Entities.Product.Create("Running Shoes", "Lightweight trail running shoes with cushioned sole and breathable knit upper. Available in sizes 7-13.", 79.99m, 80, "Sports", null),
-                SecureShop.Domain.Entities.Product.Create("Stainless Steel Water Bottle", "1 L vacuum-insulated bottle keeps drinks cold 24 h and hot 12 h. BPA-free, leak-proof lid.", 24.99m, 200, "Sports", null),
-                SecureShop.Domain.Entities.Product.Create("The Pragmatic Programmer", "Classic software-craftsmanship book by David Thomas and Andrew Hunt. 20th anniversary edition.", 39.99m, 60, "Books", null),
-                SecureShop.Domain.Entities.Product.Create("Clean Architecture", "Robert C. Martin guide to structuring applications for long-term maintainability.", 34.99m, 45, "Books", null),
-                SecureShop.Domain.Entities.Product.Create("Slim-Fit Chino Trousers", "Stretch cotton blend, mid-rise, available in Navy, Stone and Olive. Machine washable.", 44.99m, 90, "Clothing", null),
-            };
+                if (!await roleManager.RoleExistsAsync(role))
+                {
+                    await roleManager.CreateAsync(new IdentityRole(role));
+                    Log.Information("Startup init: created role {Role}", role);
+                }
+            }
 
-            foreach (var product in seedProducts)
-                seedDb.Set<SecureShop.Domain.Entities.Product>().Add(product);
+            Log.Information("Startup init: role seeding completed");
 
-            await seedDb.SaveChangesAsync();
-            Log.Information("Startup init: seeded {Count} sample products", seedProducts.Length);
+            var userManager = scope.ServiceProvider
+                .GetRequiredService<UserManager<ApplicationUser>>();
+            await BootstrapAdminProvisioner.ProvisionIfNeededAsync(
+                userManager,
+                bootstrapAdminCredentials,
+                app.Logger);
+
         }
-        else
+        catch (Exception ex)
         {
-            Log.Information("Startup init: {Count} products already in DB, skipping seed", existingCount);
+            Log.Error(ex, "Startup init: migration/seeding failed — ensure ConnectionStrings__DefaultConnection is set in Railway env vars");
         }
-    }
-    catch (Exception ex)
-    {
-        Log.Error(ex, "Startup init: product seeding failed");
-    }
-});
+
+        // Release DB-touching background services whether migration succeeded or
+        // failed — they handle database errors with their own retry logic.
+        app.Services.GetRequiredService<SecureShop.API.Services.MigrationCompletedSignal>()
+            .MarkCompleted();
+
+        // Product seeding runs in its own isolated try/catch so migration or role
+        // failures above cannot prevent the catalogue from being populated.
+        try
+        {
+            using var seedScope = app.Services.CreateScope();
+            var seedDb = seedScope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var existingCount = await seedDb.Set<SecureShop.Domain.Entities.Product>().CountAsync();
+            if (existingCount == 0)
+            {
+                var seedProducts = new[]
+                {
+                    SecureShop.Domain.Entities.Product.Create("Wireless Noise-Cancelling Headphones", "Premium over-ear headphones with active noise cancellation, 30-hour battery life and foldable design.", 89.99m, 50, "Electronics", null),
+                    SecureShop.Domain.Entities.Product.Create("Mechanical Gaming Keyboard", "TKL mechanical keyboard with RGB backlighting, Cherry MX switches and USB-C connectivity.", 64.99m, 35, "Electronics", null),
+                    SecureShop.Domain.Entities.Product.Create("Ergonomic Office Chair", "Adjustable lumbar support, breathable mesh back and armrests. Supports up to 120 kg.", 249.99m, 12, "Home", null),
+                    SecureShop.Domain.Entities.Product.Create("Running Shoes", "Lightweight trail running shoes with cushioned sole and breathable knit upper. Available in sizes 7-13.", 79.99m, 80, "Sports", null),
+                    SecureShop.Domain.Entities.Product.Create("Stainless Steel Water Bottle", "1 L vacuum-insulated bottle keeps drinks cold 24 h and hot 12 h. BPA-free, leak-proof lid.", 24.99m, 200, "Sports", null),
+                    SecureShop.Domain.Entities.Product.Create("The Pragmatic Programmer", "Classic software-craftsmanship book by David Thomas and Andrew Hunt. 20th anniversary edition.", 39.99m, 60, "Books", null),
+                    SecureShop.Domain.Entities.Product.Create("Clean Architecture", "Robert C. Martin guide to structuring applications for long-term maintainability.", 34.99m, 45, "Books", null),
+                    SecureShop.Domain.Entities.Product.Create("Slim-Fit Chino Trousers", "Stretch cotton blend, mid-rise, available in Navy, Stone and Olive. Machine washable.", 44.99m, 90, "Clothing", null),
+                };
+
+                foreach (var product in seedProducts)
+                    seedDb.Set<SecureShop.Domain.Entities.Product>().Add(product);
+
+                await seedDb.SaveChangesAsync();
+                Log.Information("Startup init: seeded {Count} sample products", seedProducts.Length);
+            }
+            else
+            {
+                Log.Information("Startup init: {Count} products already in DB, skipping seed", existingCount);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Startup init: product seeding failed");
+        }
+    });
+}
 
 app.Run();
 
