@@ -163,6 +163,7 @@ public class CheckoutModel : PageModel
             if (response.IsSuccessStatusCode)
             {
                 var responseJson = await response.Content.ReadAsStringAsync();
+                
                 var result = JsonSerializer.Deserialize<OrderResponse>(responseJson, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
@@ -210,7 +211,10 @@ public class CheckoutModel : PageModel
     private sealed class OrderResponse
     {
         public Guid Id { get; set; }
-        public string? Status { get; set; }
+        
+        // FIXED: The API returns this as an integer (0, 1, 2) for the Enum, not a string.
+        public int Status { get; set; } 
+        
         public decimal TotalAmount { get; set; }
         public string? PaymentClientSecret { get; set; }
     }
