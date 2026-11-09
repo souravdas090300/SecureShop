@@ -117,26 +117,29 @@
 </div>
 
 @functions {
-    private string GetStatusBadgeClass(string status)
+    // UPDATED: Now accepts an int instead of a string
+    private string GetStatusBadgeClass(int status)
     {
-        return status?.ToLower() switch
+        return status switch
         {
-            "pending" => "bg-warning text-dark",
-            "paymentprocessing" => "bg-info text-white",
-            "paid" => "bg-success text-white",
-            "shipped" => "bg-primary text-white",
-            "delivered" => "bg-success text-white",
-            "cancelled" => "bg-danger text-white",
+            0 => "bg-warning text-dark",      // Pending
+            1 => "bg-info text-white",        // PaymentProcessing
+            2 => "bg-success text-white",     // Paid
+            3 => "bg-danger text-white",      // Cancelled
             _ => "bg-secondary text-white"
         };
     }
 
-    private string GetStatusLabel(string status)
+    // UPDATED: Now accepts an int instead of a string
+    private string GetStatusLabel(int status)
     {
-        return status?.ToLower() switch
+        return status switch
         {
-            "paymentprocessing" => "Payment processing",
-            _ => status ?? string.Empty
+            0 => "Pending",
+            1 => "Payment processing",
+            2 => "Paid",
+            3 => "Cancelled",
+            _ => "Unknown"
         };
     }
 }
