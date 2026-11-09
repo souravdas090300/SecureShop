@@ -1,0 +1,67 @@
+@page
+@model SecureShop.API.Pages.Admin.CategoriesModel
+@{ ViewData["Title"] = "Categories"; }
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-1"><i class="fas fa-tags me-2"></i>Categories</h2>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0">
+            <li class="breadcrumb-item"><a href="/admin">Dashboard</a></li>
+            <li class="breadcrumb-item active">Categories</li>
+        </ol></nav>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-4">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <h5 class="fw-bold mb-3">Add Category</h5>
+                <div class="mb-3">
+                    <label class="form-label">Category Name</label>
+                    <input type="text" class="form-control" id="categoryName" placeholder="e.g. Smartphones">
+                </div>
+                <button class="btn btn-primary w-100" onclick="addCategory()">Add Category</button>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <h5 class="fw-bold mb-3">Existing Categories</h5>
+                <div id="categoryList" class="list-group">
+                    <div class="text-muted">Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    // Note: The categories are currently hardcoded in Create.cshtml and Edit.cshtml.
+    // To make them dynamic, you would need a Categories table in the database
+    // and an API endpoint. For now, this page displays the static categories.
+    
+    const defaultCategories = ['Electronics', 'Clothing', 'Books', 'Home', 'Sports'];
+
+    function renderCategories() {
+        const list = document.getElementById('categoryList');
+        list.innerHTML = defaultCategories.map(c => `
+            <div class="list-group-item d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-tag text-muted me-2"></i>${c}</span>
+                <button class="btn btn-sm btn-outline-danger" onclick="alert('To delete categories, add a Categories table to the database and create an API endpoint.')"><i class="fas fa-trash"></i></button>
+            </div>
+        `).join('');
+    }
+
+    function addCategory() {
+        const name = document.getElementById('categoryName').value.trim();
+        if (!name) return alert('Enter a category name');
+        alert('To add categories dynamically, you need a Categories table in the database and an API endpoint. For now, add it manually to the dropdown list in Create.cshtml and Edit.cshtml.');
+        document.getElementById('categoryName').value = '';
+    }
+
+    document.addEventListener('DOMContentLoaded', renderCategories);
+</script>
+}

@@ -44,11 +44,12 @@
 <script>
 const apiBaseUrl = '@Model.ApiBaseUrl';
 let allCustomers = [];
+const token = document.querySelector('meta[name="admin-token"]')?.content ?? '';
 
 async function loadCustomers() {
     try {
         const res = await fetch(`${apiBaseUrl}/api/auth/users`, {
-            credentials: 'include'
+            headers: { 'Authorization': `Bearer ${token}` }
         });
         if (res.ok) {
             allCustomers = await res.json();

@@ -118,47 +118,54 @@ const apiBaseUrl   = '@Model.ApiBaseUrl';
 const productId    = '@Model.ProductId';
 const cloudName    = '@Model.CloudName';
 const uploadPreset = '@Model.UploadPreset';
+const token = document.querySelector('meta[name="admin-token"]')?.content ?? '';
 
 async function loadProduct() {
-    const res = await fetch(`${apiBaseUrl}/api/products/${productId}`);
-    if (!res.ok) {
-        document.getElementById('formContent').innerHTML = '<div class="alert alert-danger">Product not found</div>';
-        return;
-    }
-    const p = await res.json();
+    try {
+        const res = await fetch(`${apiBaseUrl}/api/products/${productId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) {
+            document.getElementById('formContent').innerHTML = '<div class="alert alert-danger">Product not found</div>';
+            return;
+        }
+        const p = await res.json();
 
-    document.getElementById('formContent').innerHTML = `
-        <div class="row g-3">
-            <div class="col-12"><label class="form-label fw-semibold">Product Name <span class="text-danger">*</span></label>
-                <input type="text" class="form-control" id="productName" value="${escHtml(p.name)}"></div>
-            <div class="col-12"><label class="form-label fw-semibold">Description <span class="text-danger">*</span></label>
-                <textarea class="form-control" id="productDescription" rows="4">${escHtml(p.description)}</textarea></div>
-            <div class="col-md-6"><label class="form-label fw-semibold">Price <span class="text-danger">*</span></label>
-                <div class="input-group"><span class="input-group-text">$</span>
-                <input type="number" class="form-control" id="productPrice" step="0.01" value="${p.price}"></div></div>
-            <div class="col-md-6"><label class="form-label fw-semibold">Stock <span class="text-danger">*</span></label>
-                <input type="number" class="form-control" id="productStock" value="${p.stockQuantity}"></div>
-            <div class="col-md-6"><label class="form-label fw-semibold">Category <span class="text-danger">*</span></label>
-                <select class="form-select" id="productCategory">
-                    ${['Electronics','Clothing','Books','Home','Sports'].map(c=>`<option ${c===p.category?'selected':''}>${c}</option>`).join('')}
-                </select></div>
-            <div class="col-12 d-flex gap-2 mt-2">
-                <button class="btn btn-primary" onclick="updateProduct()" id="submitBtn">
-                    <i class="fas fa-save me-2"></i>Save Changes
-                </button>
-                <a href="/admin/products" class="btn btn-outline-secondary">Cancel</a>
-            </div>
-        </div>`;
+        document.getElementById('formContent').innerHTML = `
+            <div class="row g-3">
+                <div class="col-12"><label class="form-label fw-semibold">Product Name <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="productName" value="${escHtml(p.name)}"></div>
+                <div class="col-12"><label class="form-label fw-semibold">Description <span class="text-danger">*</span></label>
+                    <textarea class="form-control" id="productDescription" rows="4">${escHtml(p.description)}</textarea></div>
+                <div class="col-md-6"><label class="form-label fw-semibold">Price <span class="text-danger">*</span></label>
+                    <div class="input-group"><span class="input-group-text">$</span>
+                    <input type="number" class="form-control" id="productPrice" step="0.01" value="${p.price}"></div></div>
+                <div class="col-md-6"><label class="form-label fw-semibold">Stock <span class="text-danger">*</span></label>
+                    <input type="number" class="form-control" id="productStock" value="${p.stockQuantity}"></div>
+                <div class="col-md-6"><label class="form-label fw-semibold">Category <span class="text-danger">*</span></label>
+                    <select class="form-select" id="productCategory">
+                        ${['Electronics','Clothing','Books','Home','Sports'].map(c=>`<option ${c===p.category?'selected':''}>${c}</option>`).join('')}
+                    </select></div>
+                <div class="col-12 d-flex gap-2 mt-2">
+                    <button class="btn btn-primary" onclick="updateProduct()" id="submitBtn">
+                        <i class="fas fa-save me-2"></i>Save Changes
+                    </button>
+                    <a href="/admin/products" class="btn btn-outline-secondary">Cancel</a>
+                </div>
+            </div>`;
 
-    // Pre-populate image panel
-    const imageUrl = p.imageUrl || '';
-    document.getElementById('productImageUrl').value = imageUrl;
-    if (imageUrl) {
-        document.getElementById('previewImg').src             = imageUrl;
-        document.getElementById('imagePreview').style.display = 'block';
-        document.getElementById('dropZone').style.display     = 'none';
-        document.getElementById('uploadStatus').style.display = 'block';
-        document.getElementById('uploadStatusText').textContent = 'Current image';
+        // Pre-populate image panel
+        const imageUrl = p.imageUrl || '';
+        document.getElementById('productImageUrl').value = imageUrl;
+        if (imageUrl) {
+            document.getElementById('previewImg').src             = imageUrl;
+            document.getElementById('imagePreview').style.display = 'block';
+            document.getElementById('dropZone').style.display     = 'none';
+            document.getElementById('uploadStatus').style.display = 'block';
+            document.getElementById('uploadStatusText').textContent = 'Current image';
+        }
+    } catch (e) {
+        document.getElementById('formContent').innerHTML = '<div class="alert alert-danger">Failed to load product.</div>';
     }
 }
 
@@ -174,20 +181,28 @@ async function updateProduct() {
     btn.disabled  = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
 
-    const res = await fetch(`${apiBaseUrl}/api/products/${productId}`, {
-        method: 'PUT',
-        credentials: 'include',
-        headers: {
-            'Content-Type': 'application/json',
-            'RequestVerificationToken': document.querySelector('meta[name="csrf-token"]')?.content ?? ''
-        },
-        body: JSON.stringify({ name, description, price, category, stockQuantity: stock, imageUrl: imageUrl || null })
-    });
+    try {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
 
-    if (res.ok) {
-        window.location.replace('/admin/products');
-    } else {
-        document.getElementById('formAlert').innerHTML = '<div class="alert alert-danger">Failed to update product.</div>';
+        const res = await fetch(`${apiBaseUrl}/api/products/${productId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'RequestVerificationToken': csrfToken,
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ name, description, price, category, stockQuantity: stock, imageUrl: imageUrl || null })
+        });
+
+        if (res.ok) {
+            window.location.replace('/admin/products');
+        } else {
+            document.getElementById('formAlert').innerHTML = '<div class="alert alert-danger">Failed to update product.</div>';
+            btn.disabled  = false;
+            btn.innerHTML = '<i class="fas fa-save me-2"></i>Save Changes';
+        }
+    } catch (e) {
+        document.getElementById('formAlert').innerHTML = '<div class="alert alert-danger">Server error.</div>';
         btn.disabled  = false;
         btn.innerHTML = '<i class="fas fa-save me-2"></i>Save Changes';
     }
@@ -275,7 +290,7 @@ function removeImage() {
     document.getElementById('fileInput').value = '';
 }
 
-function escHtml(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+function escHtml(t) { if (!t) return ''; const d = document.createElement('div'); d.textContent = String(t); return d.innerHTML; }
 document.addEventListener('DOMContentLoaded', loadProduct);
 </script>
 }

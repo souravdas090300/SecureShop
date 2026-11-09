@@ -105,11 +105,12 @@
     <script>
         const apiBaseUrl = '@Model.ApiBaseUrl';
         let allOrders = [];
+        const token = document.querySelector('meta[name="admin-token"]')?.content ?? '';
 
         async function loadOrders() {
             try {
                 const response = await fetch(`${apiBaseUrl}/api/orders`, {
-                    credentials: 'include'
+                    headers: { 'Authorization': `Bearer ${token}` }
                 });
 
                 if (response.ok) {
@@ -196,7 +197,6 @@
 
         async function viewOrderDetails(orderId) {
             const modalEl = document.getElementById('orderDetailsModal');
-            // Fix aria-hidden accessibility warning: remove attr before show so focused descendants are not hidden
             modalEl.removeAttribute('aria-hidden');
             const modal = new bootstrap.Modal(modalEl);
             const content = document.getElementById('orderDetailsContent');
@@ -206,7 +206,7 @@
 
             try {
                 const response = await fetch(`${apiBaseUrl}/api/orders/${orderId}`, {
-                    credentials: 'include'
+                    headers: { 'Authorization': `Bearer ${token}` }
                 });
 
                 if (response.ok) {
@@ -281,10 +281,10 @@
             try {
                 const response = await fetch(`${apiBaseUrl}/api/orders/${orderId}/status`, {
                     method: 'PUT',
-                    credentials: 'include',
                     headers: {
                         'Content-Type': 'application/json',
-                        'RequestVerificationToken': document.querySelector('meta[name="csrf-token"]')?.content ?? ''
+                        'RequestVerificationToken': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+                        'Authorization': `Bearer ${token}`
                     },
                     body: JSON.stringify({ status: newStatus })
                 });

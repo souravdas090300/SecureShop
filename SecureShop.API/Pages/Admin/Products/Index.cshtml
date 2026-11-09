@@ -126,6 +126,7 @@ const apiBaseUrl = '@Model.ApiBaseUrl';
 let allProducts = [];
 let deleteProductId = null;
 let isLoading = false;
+const token = document.querySelector('meta[name="admin-token"]')?.content ?? '';
 
 async function loadProducts() {
     if (isLoading) return;
@@ -146,7 +147,7 @@ async function loadProducts() {
         while (page <= totalPages) {
             const response = await fetch(
                 `${apiBaseUrl}/api/products?page=${page}&pageSize=${pageSize}`,
-                { credentials: 'include' });
+                { headers: { 'Authorization': `Bearer ${token}` } });
 
             if (!response.ok) {
                 showTableError(`Server returned ${response.status}`);
@@ -282,9 +283,9 @@ function applyFilters() {
         (p.name ?? '').toLowerCase().includes(search) ||
         (p.description ?? '').toLowerCase().includes(search));
     if (category) filtered = filtered.filter(p => p.category === category);
-    if (stock === 'instock')    filtered = filtered.filter(p => (p.stock ?? 0) >= 10);
-    if (stock === 'lowstock')   filtered = filtered.filter(p => (p.stock ?? 0) > 0 && (p.stock ?? 0) < 10);
-    if (stock === 'outofstock') filtered = filtered.filter(p => (p.stock ?? 0) === 0);
+    if (stock === 'instock')    filtered = filtered.filter(p => (p.stock ?? p.stockQuantity ?? 0) >= 10);
+    if (stock === 'lowstock')   filtered = filtered.filter(p => (p.stock ?? p.stockQuantity ?? 0) > 0 && (p.stock ?? p.stockQuantity ?? 0) < 10);
+    if (stock === 'outofstock') filtered = filtered.filter(p => (p.stock ?? p.stockQuantity ?? 0) === 0);
 
     renderProducts(filtered);
 }
@@ -316,9 +317,9 @@ async function deleteProduct() {
     try {
         const response = await fetch(`${apiBaseUrl}/api/products/${deleteProductId}`, {
             method: 'DELETE',
-            credentials: 'include',
             headers: {
-                'RequestVerificationToken': document.querySelector('meta[name="csrf-token"]')?.content ?? ''
+                'RequestVerificationToken': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+                'Authorization': `Bearer ${token}`
             }
         });
 

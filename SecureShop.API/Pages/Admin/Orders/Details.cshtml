@@ -1,6 +1,8 @@
 @page "/admin/orders/{id}"
 @model SecureShop.API.Pages.Admin.Orders.AdminOrderDetailsModel
-@{ ViewData["Title"] = "Order Details"; }
+@{
+    ViewData["Title"] = "Order Details";
+}
 
 <div class="d-flex align-items-center mb-4 gap-3">
     <a href="/admin/orders" class="btn btn-outline-secondary btn-sm">
@@ -29,13 +31,17 @@
 <script>
 const apiBaseUrl = '@Model.ApiBaseUrl';
 const orderId = '@Model.OrderId';
+const token = document.querySelector('meta[name="admin-token"]')?.content ?? '';
 
 async function loadOrder() {
     try {
         const res = await fetch(`${apiBaseUrl}/api/orders/${orderId}`, {
-            credentials: 'include'
+            headers: { 'Authorization': `Bearer ${token}` }
         });
-        if (!res.ok) { document.getElementById('orderContent').innerHTML = '<div class="alert alert-danger">Order not found</div>'; return; }
+        if (!res.ok) { 
+            document.getElementById('orderContent').innerHTML = '<div class="alert alert-danger">Order not found</div>'; 
+            return; 
+        }
         const order = await res.json();
         renderOrder(order);
     } catch(e) {
@@ -48,10 +54,12 @@ function renderOrder(order) {
     const classMap = {0:'warning',1:'info',2:'success',3:'primary',4:'success',5:'danger'};
     const s = getStatusValue(order.status);
     const nextStatus = s === 2 ? 3 : (s === 3 ? 4 : null);
+    
     const statusControls = nextStatus === null
         ? '<p class="text-muted mb-0">Shipping actions are available after payment is confirmed.</p>'
         : `<select class="form-select mb-3" id="statusSelect"><option value="${nextStatus}">${statusMap[nextStatus]}</option></select>
            <button class="btn btn-primary w-100" onclick="updateStatus('${order.id}')"><i class="fas fa-save me-2"></i>Update</button>`;
+           
     const items = (order.items||[]).map(i=>`
         <tr>
             <td>${i.productName||'N/A'}</td>
@@ -59,6 +67,7 @@ function renderOrder(order) {
             <td class="text-end">$${(i.unitPrice ?? i.price ?? 0).toFixed(2)}</td>
             <td class="text-end fw-bold">$${(i.quantity*(i.unitPrice ?? i.price ?? 0)).toFixed(2)}</td>
         </tr>`).join('');
+        
     document.getElementById('orderContent').innerHTML = `
         <div class="row g-4">
             <div class="col-md-8">
@@ -68,8 +77,23 @@ function renderOrder(order) {
                         <span class="badge bg-${classMap[s]}">${statusMap[s]||'Unknown'}</span>
                     </div>
                     <div class="card-body">
-                        <table class="table"><thead><tr><th>Product</th><th class="text-center">Qty</th><th class="text-end">Price</th><th class="text-end">Subtotal</th></tr></thead><tbody>${items}</tbody>
-                        <tfoot><tr><td colspan="3" class="text-end fw-bold">Total</td><td class="text-end fw-bold text-success fs-5">$${order.totalAmount.toFixed(2)}</td></tr></tfoot></table>
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th class="text-center">Qty</th>
+                                    <th class="text-end">Price</th>
+                                    <th class="text-end">Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody>${items}</tbody>
+                            <tfoot>
+                                <tr>
+                                    <td colspan="3" class="text-end fw-bold">Total</td>
+                                    <td class="text-end fw-bold text-success fs-5">$${order.totalAmount.toFixed(2)}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -102,16 +126,24 @@ function getStatusValue(status) {
 
 async function updateStatus(id) {
     const status = parseInt(document.getElementById('statusSelect').value);
-    const res = await fetch(`${apiBaseUrl}/api/orders/${id}/status`, {
-        method:'PUT',
-        credentials: 'include',
-        headers:{
-            'Content-Type':'application/json',
-            'RequestVerificationToken': document.querySelector('meta[name="csrf-token"]')?.content ?? ''
-        },
-        body: JSON.stringify({status})
-    });
-    if (res.ok) { loadOrder(); } else { alert('Failed to update status'); }
+    try {
+        const res = await fetch(`${apiBaseUrl}/api/orders/${id}/status`, {
+            method:'PUT',
+            headers:{
+                'Content-Type':'application/json',
+                'RequestVerificationToken': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({status})
+        });
+        if (res.ok) { 
+            loadOrder(); 
+        } else { 
+            alert('Failed to update status'); 
+        }
+    } catch {
+        alert('Network error while updating status');
+    }
 }
 
 document.addEventListener('DOMContentLoaded', loadOrder);
