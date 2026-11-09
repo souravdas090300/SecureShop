@@ -264,7 +264,7 @@ public class AccountOrdersModelTests
 
         await model.OnGetAsync();
 
-        model.Orders.Should().ContainSingle().Which.Status.Should().Be("Paid");
+        model.Orders.Should().ContainSingle().Which.Status.Should().Be(2);
         model.ErrorMessage.Should().BeNull();
     }
 
