@@ -39,10 +39,6 @@
 
 @section Scripts {
 <script>
-    // Note: The categories are currently hardcoded in Create.cshtml and Edit.cshtml.
-    // To make them dynamic, you would need a Categories table in the database
-    // and an API endpoint. For now, this page displays the static categories.
-    
     const defaultCategories = ['Electronics', 'Clothing', 'Books', 'Home', 'Sports'];
 
     function renderCategories() {
@@ -50,7 +46,7 @@
         list.innerHTML = defaultCategories.map(c => `
             <div class="list-group-item d-flex justify-content-between align-items-center">
                 <span><i class="fas fa-tag text-muted me-2"></i>${c}</span>
-                <button class="btn btn-sm btn-outline-danger" onclick="alert('To delete categories, add a Categories table to the database and create an API endpoint.')"><i class="fas fa-trash"></i></button>
+                <button class="btn btn-sm btn-outline-danger" onclick="alert('To delete categories, add a Categories table to the database.')"><i class="fas fa-trash"></i></button>
             </div>
         `).join('');
     }
@@ -58,7 +54,7 @@
     function addCategory() {
         const name = document.getElementById('categoryName').value.trim();
         if (!name) return alert('Enter a category name');
-        alert('To add categories dynamically, you need a Categories table in the database and an API endpoint. For now, add it manually to the dropdown list in Create.cshtml and Edit.cshtml.');
+        alert('To add categories dynamically, you need a Categories table in the database. For now, add it manually to the dropdown list in Create.cshtml and Edit.cshtml.');
         document.getElementById('categoryName').value = '';
     }
 
