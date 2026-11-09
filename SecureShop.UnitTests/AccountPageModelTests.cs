@@ -793,7 +793,7 @@ public class CheckoutModelTests
         var payload = new
         {
             id = "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            status = "PaymentProcessing",
+            status = 1, // FIXED: Status is an integer enum in the API response
             totalAmount = 99.99m,
             paymentClientSecret = "pi_test_client_secret"
         };
@@ -854,7 +854,7 @@ public class CheckoutModelTests
         var payload = new
         {
             id = "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-            status = "PaymentProcessing",
+            status = 1, // FIXED: Status is an integer enum in the API response
             totalAmount = 49.99m,
             paymentClientSecret = "pi_test_client_secret"
         };

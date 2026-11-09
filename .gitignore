@@ -77,3 +77,4 @@ SecureShop.API/App_Data/
 # Local throwaway test Postgres cluster
 .pgtest-data/
 .pgtest.log
+.aider*
