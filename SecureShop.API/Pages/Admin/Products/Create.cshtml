@@ -31,11 +31,6 @@
                         <label class="form-label fw-semibold">Description <span class="text-danger">*</span></label>
                         <textarea class="form-control" id="productDescription" rows="4" placeholder="Describe the product..."></textarea>
                     </div>
-                    <div class="col-12">
-                        <label class="form-label fw-semibold">Full Details / Specifications (Optional)</label>
-                        <textarea class="form-control" id="productDetails" rows="6" placeholder="Paste full specifications here (e.g., Processor, RAM, Camera, Battery)..."></textarea>
-                        <small class="text-muted">This can be rendered in an accordion on the product page.</small>
-                    </div>
                     <div class="col-md-6">
                         <label class="form-label fw-semibold">Price <span class="text-danger">*</span></label>
                         <div class="input-group">
@@ -279,7 +274,6 @@ function removeImage() {
 async function createProduct() {
     const name        = document.getElementById('productName').value.trim();
     const description = document.getElementById('productDescription').value.trim();
-    const details     = document.getElementById('productDetails').value.trim();
     const price       = parseFloat(document.getElementById('productPrice').value);
     const stock       = parseInt(document.getElementById('productStock').value);
     const category    = document.getElementById('productCategory').value;
@@ -304,7 +298,8 @@ async function createProduct() {
                 'RequestVerificationToken': csrfToken,
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({ name, description, price, stockQuantity: stock, category, imageUrl: imageUrl || null, details: details || null })
+            // FIXED: Removed "details" because the DB has no such column
+            body: JSON.stringify({ name, description, price, stockQuantity: stock, category, imageUrl: imageUrl || null })
         });
         if (res.ok) {
             window.location.replace('/admin/products');
