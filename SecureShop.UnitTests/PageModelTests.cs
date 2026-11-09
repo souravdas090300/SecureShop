@@ -257,7 +257,7 @@ public class AccountOrdersModelTests
     {
         var payload = new[]
         {
-            new { id = "3fa85f64-5717-4562-b3fc-2c963f66afa6", createdAt = DateTime.UtcNow, totalAmount = 49.99m, status = "Paid",
+            new { id = "3fa85f64-5717-4562-b3fc-2c963f66afa6", createdAt = DateTime.UtcNow, totalAmount = 49.99m, status = 2,
                   items = Array.Empty<object>() }
         };
         var model = CreateModel(PageModelTestHelper.JsonOk(payload));
