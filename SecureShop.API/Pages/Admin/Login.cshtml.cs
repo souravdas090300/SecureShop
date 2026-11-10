@@ -4,8 +4,11 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.IdentityModel.Tokens;
 using SecureShop.Domain.Entities;
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Text;
 
 namespace SecureShop.API.Pages.Admin;
 
@@ -27,15 +30,18 @@ public class AdminLoginModel : PageModel
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly ILogger<AdminLoginModel> _logger;
+    private readonly IConfiguration _configuration;
 
     public AdminLoginModel(
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager,
-        ILogger<AdminLoginModel> logger)
+        ILogger<AdminLoginModel> logger,
+        IConfiguration configuration)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _logger = logger;
+        _configuration = configuration;
     }
 
     [BindProperty]
@@ -133,7 +139,7 @@ public class AdminLoginModel : PageModel
         }
     }
 
-    /// <summary>Establishes the AdminCookie session: non-persistent, 45-minute sliding.</summary>
+    /// <summary>Establishes the AdminCookie session and the AuthToken JWT cookie.</summary>
     internal async Task SignInAdminAsync(ApplicationUser user)
     {
         var roles = await _userManager.GetRolesAsync(user);
@@ -146,6 +152,7 @@ public class AdminLoginModel : PageModel
         };
         claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));
 
+        // 1. Set the AdminCookie (UI)
         var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "AdminCookie"));
         await HttpContext.SignInAsync(
             "AdminCookie",
@@ -156,6 +163,33 @@ public class AdminLoginModel : PageModel
                 ExpiresUtc = DateTimeOffset.UtcNow.Add(AdminSessionLifetime),
                 AllowRefresh = true
             });
+
+        // 2. Set the AuthToken cookie (API JWT)
+        var jwtSecret = _configuration["Jwt:Secret"] 
+            ?? throw new InvalidOperationException("Jwt:Secret is missing in configuration.");
+        
+        var tokenDescriptor = new SecurityTokenDescriptor
+        {
+            Subject = new ClaimsIdentity(claims),
+            Expires = DateTime.UtcNow.Add(AdminSessionLifetime),
+            Issuer = _configuration["Jwt:Issuer"],
+            Audience = _configuration["Jwt:Audience"],
+            SigningCredentials = new SigningCredentials(
+                new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+                SecurityAlgorithms.HmacSha256Signature)
+        };
+
+        var tokenHandler = new JwtSecurityTokenHandler();
+        var token = tokenHandler.CreateToken(tokenDescriptor);
+        var tokenString = tokenHandler.WriteToken(token);
+
+        Response.Cookies.Append("AuthToken", tokenString, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Lax,
+            Expires = DateTimeOffset.UtcNow.Add(AdminSessionLifetime)
+        });
 
         _logger.LogInformation(
             "[AdminLogin] Admin sign-in succeeded for user {UserId} from {Ip} at {Time:u}",

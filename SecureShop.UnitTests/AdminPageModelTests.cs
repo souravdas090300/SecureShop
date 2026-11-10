@@ -22,11 +22,6 @@ using System.Security.Claims;
 
 namespace SecureShop.UnitTests;
 
-/// <summary>
-/// For admin page models we call OnGet() directly, bypassing the
-/// AdminPageModel.OnPageHandlerExecuting filter (which runs through the full
-/// MVC pipeline). The OnGet methods only read from IConfiguration/TempData.
-/// </summary>
 internal static class AdminTestHelper
 {
     public static IConfiguration Config(
@@ -484,16 +479,26 @@ public class AdminLoginModelTests
     public void OnGet_CompletesWithoutError()
     {
         var logger = new Mock<ILogger<AdminLoginModel>>();
-        var store = new Mock<IUserStore<SecureShop.Domain.Entities.ApplicationUser>>();
-        var userManager = new Mock<Microsoft.AspNetCore.Identity.UserManager<SecureShop.Domain.Entities.ApplicationUser>>(store.Object, null!, null!, null!, null!, null!, null!, null!, null!);
-        var signInManager = new Mock<Microsoft.AspNetCore.Identity.SignInManager<SecureShop.Domain.Entities.ApplicationUser>>(
-            userManager.Object,
+        var store = new Mock<IUserStore<ApplicationUser>>();
+        var um = new Mock<UserManager<ApplicationUser>>(store.Object, null!, null!, null!, null!, null!, null!, null!, null!);
+        var signInManager = new Mock<SignInManager<ApplicationUser>>(
+            um.Object,
             new Mock<IHttpContextAccessor>().Object,
-            new Mock<Microsoft.AspNetCore.Identity.IUserClaimsPrincipalFactory<SecureShop.Domain.Entities.ApplicationUser>>().Object,
+            new Mock<IUserClaimsPrincipalFactory<ApplicationUser>>().Object,
             null!, null!, null!, null!);
 
-        var model = new AdminLoginModel(
-            userManager.Object, signInManager.Object, logger.Object);
+        // FIXED: Pass the required IConfiguration
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Jwt:Secret"] = "test-secret-key-for-unit-tests-32+",
+                ["Jwt:Issuer"] = "test",
+                ["Jwt:Audience"] = "test"
+            })
+            .Build();
+
+        var model = new AdminLoginModel(um.Object, signInManager.Object, logger.Object, config);
+            
         AdminTestHelper.SetupPageContext(model);
         model.TempData = AdminTestHelper.EmptyTempData();
 
@@ -536,8 +541,17 @@ public class AdminLoginModelPostTests
             .AddSingleton(authSvc.Object)
             .BuildServiceProvider();
 
-        var model = new AdminLoginModel(
-            um.Object, signInManager.Object, logger.Object);
+        // FIXED: Use 'um.Object' (not 'userManager.Object') and pass config
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Jwt:Secret"] = "test-secret-key-for-unit-tests-32+",
+                ["Jwt:Issuer"] = "test",
+                ["Jwt:Audience"] = "test"
+            })
+            .Build();
+
+        var model = new AdminLoginModel(um.Object, signInManager.Object, logger.Object, config);
 
         um.Setup(u => u.GetLockoutEnabledAsync(It.IsAny<ApplicationUser>())).ReturnsAsync(false);
         um.Setup(u => u.SetLockoutEnabledAsync(
@@ -693,7 +707,6 @@ public class AdminPageModelFilterTests
             model);
     }
 
-    // Minimal next-delegate that signals the handler was invoked.
     private static PageHandlerExecutionDelegate BuildNextDelegate(
         PageContext pageContext, object handlerInstance, bool[] invoked)
     {
@@ -761,7 +774,6 @@ public class AdminPageModelFilterTests
     [Fact]
     public async Task OnPageHandlerExecutionAsync_AuthSucceedsAdminRoleNoName_SetsDefaultAdminName()
     {
-        // Admin role present but no Name claim → Identity.Name is null → uses "Administrator"
         var identity  = new ClaimsIdentity(new[] { new Claim(ClaimTypes.Role, "Admin") }, "AdminCookie");
         var principal = new ClaimsPrincipal(identity);
         var ticket    = new AuthenticationTicket(principal, "AdminCookie");
