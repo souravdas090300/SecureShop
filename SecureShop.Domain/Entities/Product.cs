@@ -30,6 +30,9 @@ public class Product
     /// <summary>Optional URL of the product's primary image.</summary>
     public string? ImageUrl { get; private set; }
 
+    /// <summary>Additional details about the product.</summary>
+    public string? Details { get; set; }
+
     /// <summary>
     /// Indicates whether the product is visible and purchasable.
     /// Soft-deleted products have <c>IsActive = false</c>.
@@ -41,6 +44,7 @@ public class Product
 
     /// <summary>UTC timestamp of the most recent update.</summary>
     public DateTime UpdatedAt { get; private set; }
+
 
     // EF Core requires a parameterless constructor for materialisation.
     private Product() { }

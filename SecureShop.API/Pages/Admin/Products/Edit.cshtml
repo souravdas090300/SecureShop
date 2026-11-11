@@ -135,8 +135,10 @@ async function loadProduct() {
             <div class="row g-3">
                 <div class="col-12"><label class="form-label fw-semibold">Product Name <span class="text-danger">*</span></label>
                     <input type="text" class="form-control" id="productName" value="${escHtml(p.name)}"></div>
-                <div class="col-12"><label class="form-label fw-semibold">Description <span class="text-danger">*</span></label>
-                    <textarea class="form-control" id="productDescription" rows="4">${escHtml(p.description)}</textarea></div>
+                <div class="col-12"><label class="form-label fw-semibold">Short Description <span class="text-danger">*</span></label>
+                    <textarea class="form-control" id="productDescription" rows="3">${escHtml(p.description)}</textarea></div>
+                <div class="col-12"><label class="form-label fw-semibold">Full Details / Specifications (Optional)</label>
+                    <textarea class="form-control" id="productDetails" rows="6">${escHtml(p.details || '')}</textarea></div>
                 <div class="col-md-6"><label class="form-label fw-semibold">Price <span class="text-danger">*</span></label>
                     <div class="input-group"><span class="input-group-text">$</span>
                     <input type="number" class="form-control" id="productPrice" step="0.01" value="${p.price}"></div></div>
@@ -172,6 +174,7 @@ async function loadProduct() {
 async function updateProduct() {
     const name        = document.getElementById('productName').value.trim();
     const description = document.getElementById('productDescription').value.trim();
+    const details     = document.getElementById('productDetails').value.trim();
     const price       = parseFloat(document.getElementById('productPrice').value);
     const stock       = parseInt(document.getElementById('productStock').value);
     const category    = document.getElementById('productCategory').value;
