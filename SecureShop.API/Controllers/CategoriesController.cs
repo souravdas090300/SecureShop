@@ -1,21 +1,21 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using SecureShop.Domain.Entities;
 using SecureShop.Infrastructure;
-using Microsoft.EntityFrameworkCore;
 
 namespace SecureShop.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "Admin")]  // <-- Ensure this is exactly "Admin"
 public class CategoriesController : ControllerBase
 {
     private readonly AppDbContext _context;
     public CategoriesController(AppDbContext context) => _context = context;
 
     [HttpGet]
-    [AllowAnonymous]
+    [AllowAnonymous] // The GET (list) should be public so the dropdown works
     public async Task<IActionResult> GetAll()
     {
         var categories = await _context.Categories
