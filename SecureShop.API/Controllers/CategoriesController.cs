@@ -3,12 +3,13 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SecureShop.Domain.Entities;
 using SecureShop.Infrastructure;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 
 namespace SecureShop.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = "Admin")]  // <-- Ensure this is exactly "Admin"
+[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Roles = "Admin")]  // <-- Ensure this is exactly "Admin"
 public class CategoriesController : ControllerBase
 {
     private readonly AppDbContext _context;
