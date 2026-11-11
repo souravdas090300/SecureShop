@@ -39,25 +39,69 @@
 
 @section Scripts {
 <script>
-    const defaultCategories = ['Electronics', 'Clothing', 'Books', 'Home', 'Sports'];
+    const apiBaseUrl = '@Model.ApiBaseUrl';
+    const token = document.querySelector('meta[name="admin-token"]')?.content ?? '';
 
-    function renderCategories() {
+    async function loadCategories() {
         const list = document.getElementById('categoryList');
-        list.innerHTML = defaultCategories.map(c => `
-            <div class="list-group-item d-flex justify-content-between align-items-center">
-                <span><i class="fas fa-tag text-muted me-2"></i>${c}</span>
-                <button class="btn btn-sm btn-outline-danger" onclick="alert('To delete categories, add a Categories table to the database.')"><i class="fas fa-trash"></i></button>
-            </div>
-        `).join('');
+        list.innerHTML = '<div class="text-muted">Loading...</div>';
+        
+        try {
+            const res = await fetch(`${apiBaseUrl}/api/categories`);
+            if (!res.ok) throw new Error('Failed');
+            const categories = await res.json();
+            
+            if (categories.length === 0) {
+                list.innerHTML = '<div class="text-muted">No categories yet.</div>';
+                return;
+            }
+
+            list.innerHTML = categories.map(c => `
+                <div class="list-group-item d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-tag text-muted me-2"></i>${c.name}</span>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteCategory('${c.id}')"><i class="fas fa-trash"></i></button>
+                </div>
+            `).join('');
+        } catch (e) {
+            list.innerHTML = '<div class="text-danger">Failed to load categories.</div>';
+        }
     }
 
-    function addCategory() {
+    async function addCategory() {
         const name = document.getElementById('categoryName').value.trim();
         if (!name) return alert('Enter a category name');
-        alert('To add categories dynamically, you need a Categories table in the database. For now, add it manually to the dropdown list in Create.cshtml and Edit.cshtml.');
-        document.getElementById('categoryName').value = '';
+
+        try {
+            const res = await fetch(`${apiBaseUrl}/api/categories`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ name })
+            });
+            if (res.ok) {
+                document.getElementById('categoryName').value = '';
+                loadCategories();
+            } else {
+                alert('Failed to add category');
+            }
+        } catch (e) {
+            alert('Server error');
+        }
     }
 
-    document.addEventListener('DOMContentLoaded', renderCategories);
+    async function deleteCategory(id) {
+        if (!confirm('Delete this category?')) return;
+        try {
+            const res = await fetch(`${apiBaseUrl}/api/categories/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) loadCategories();
+        } catch (e) { alert('Failed'); }
+    }
+
+    document.addEventListener('DOMContentLoaded', loadCategories);
 </script>
 }
