@@ -6,10 +6,12 @@ namespace SecureShop.API.Pages.Admin;
 public class AnalyticsModel : AdminPageModel
 {
     private readonly IConfiguration _configuration;
-
     public string ApiBaseUrl { get; set; } = string.Empty;
 
-    public AnalyticsModel(IConfiguration configuration) => _configuration = configuration;
+    public AnalyticsModel(IConfiguration configuration) 
+    {
+        _configuration = configuration;
+    }
 
     public void OnGet()
     {
