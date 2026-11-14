@@ -20,6 +20,7 @@ using SecureShop.API.Helpers;
 using SecureShop.Application;
 using SecureShop.Domain.Entities;
 using SecureShop.Infrastructure;
+using SecureShop.Application.Services; // <-- FIX: Added to resolve OrderService error
 
 // ── Early crash handler ──────────────────────────────────────────────────────
 AppDomain.CurrentDomain.UnhandledException += (_, e) =>
@@ -116,7 +117,7 @@ builder.Services.AddAuthentication(options =>
     .AddCookie("AdminCookie", options =>
     {
         options.Cookie.Name = ".SecureShop.Admin";
-        options.Cookie.Path = "/admin";
+        options.Cookie.Path = "/admin"; // <-- RESTRICTION: Means cookie is ONLY sent to /admin URLs
         options.LoginPath = "/admin/login";
         options.LogoutPath = "/admin/logout";
         options.AccessDeniedPath = PathString.Empty;
@@ -352,6 +353,21 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 
 app.MapGet("/api/swagger", () => Results.Redirect("/swagger"));
 
+// ── CSV Export Endpoint (Placed inside /admin to access the AdminCookie) ─────
+app.MapGet("/admin/export-orders", async (OrderService svc) =>
+{
+    var orders = await svc.GetAllOrdersAsync();
+    var csv = new StringBuilder();
+    csv.AppendLine("Order ID,Date,Customer,Status,Total Amount");
+    foreach (var o in orders)
+    {
+        csv.AppendLine($"{o.Id},{o.CreatedAt:yyyy-MM-dd HH:mm},\"{o.CustomerEmail}\",{o.Status},{o.TotalAmount}");
+    }
+    
+    var bytes = Encoding.UTF8.GetBytes(csv.ToString());
+    return Results.File(bytes, "text/csv", $"orders-{DateTime.UtcNow:yyyyMMdd}.csv");
+}).RequireAuthorization("AdminOnly");
+
 // ── One-shot product seed endpoint (Admin session required) ──────────────────────
 // Note: The Antiforgery check has been removed here. Security is provided by the
 // Admin role requirement and the Bearer token, which is sufficient for this
@@ -436,6 +452,7 @@ app.MapGet("/api/auth/status", (HttpContext context) =>
         claims
     });
 }).RequireAuthorization();
+
 
 // ── Database migration & seeding ─────────────────────────────────────────────
 Log.Information("Startup init: finished, starting web host");
