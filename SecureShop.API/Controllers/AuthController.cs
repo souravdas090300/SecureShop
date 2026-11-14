@@ -40,6 +40,7 @@ public class AuthController : ControllerBase
     /// <param name="dto">Registration data: first name, last name, email, and password.</param>
     /// <returns>200 OK with <see cref="AuthResponseDto"/>, or 400/500 on failure.</returns>
     [HttpPost("register")]
+    [AllowAnonymous]
     public async Task<ActionResult<AuthResponseDto>> Register([FromBody] RegisterDto dto)
     {
         try
@@ -50,8 +51,14 @@ public class AuthController : ControllerBase
             }
             
             var result = await _authService.RegisterAsync(dto);
-            _logger.LogInformation("Registration successful");
+            _logger.LogInformation("Registration successful for {Email}", dto.Email);
             return Ok(result);
+        }
+        catch (DomainException ex)
+        {
+            // Domain exceptions here mean business rule violations (e.g., email already in use)
+            _logger.LogWarning("Registration validation error: {Message}", ex.Message);
+            return BadRequest(new { message = ex.Message });
         }
         catch (InvalidOperationException ex)
         {
@@ -138,6 +145,9 @@ public class AuthController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Returns a list of all users (admin only).
+    /// </summary>
     [HttpGet("users")]
     [Authorize(AuthenticationSchemes = "AdminCookie,Bearer", Roles = "Admin")]
     public IActionResult GetAllUsers()

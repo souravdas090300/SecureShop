@@ -127,7 +127,6 @@ public class RegisterModel : PageModel
                         await _userManager.SetAuthenticationTokenAsync(
                             user, "SecureShop", "EmailVerifyOTP", $"{otp}|{expiry}");
 
-                        bool emailSent = true;
                         try
                         {
                             await _emailService.SendAsync(
@@ -137,33 +136,19 @@ public class RegisterModel : PageModel
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogWarning(ex, "OTP email failed for {Email} — auto-confirming email", Email);
-                            emailSent = false;
+                            _logger.LogError(ex, "OTP email failed for {Email}", Email);
+                            
+                            // Security fix: Do NOT auto-confirm. Show an error instead.
+                            ErrorMessage = "Your account was created, but we could not send the verification email. Please check your email address or contact support.";
+                            return Page(); 
                         }
 
-                        if (emailSent)
-                        {
-                            // OTP email sent — show verification page.
-                            // Do NOT store the JWT in TempData; VerifyEmail generates a fresh token.
-                            TempData["PendingEmail"]   = Email;
-                            TempData["PendingUserId"]  = user.Id;
-                            TempData["SuccessMessage"] = $"Welcome {result.FirstName ?? FirstName}! A 6-digit verification code has been sent to {Email}.";
-                            return RedirectToPage("/Account/VerifyEmail");
-                        }
-
-                        // Email delivery failed — auto-confirm and sign the user in directly.
-                        user.EmailConfirmed = true;
-                        await _userManager.UpdateAsync(user);
-                        await SignInWithTokenAsync(result.Token, result.FirstName, result.LastName, result.Email);
-                        TempData["SuccessMessage"] = $"Welcome {result.FirstName ?? FirstName}! Your account has been created.";
-                        return Redirect("/");
+                        // Email sent successfully
+                        TempData["PendingEmail"]   = Email;
+                        TempData["PendingUserId"]  = user.Id;
+                        TempData["SuccessMessage"] = $"Welcome {result.FirstName ?? FirstName}! A 6-digit verification code has been sent to {Email}.";
+                        return RedirectToPage("/Account/VerifyEmail");
                     }
-
-                    // Fallback (user not found after creation — very unlikely)
-                    // We still have the token so sign in directly.
-                    await SignInWithTokenAsync(result.Token, result.FirstName, result.LastName, result.Email);
-                    TempData["SuccessMessage"] = "Registration successful! Welcome to SecureShop.";
-                    return Redirect("/");
                 }
 
                 // Registered but no token — shouldn't happen; send to login as fallback.
