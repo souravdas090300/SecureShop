@@ -72,6 +72,9 @@
         if (!name) return alert('Enter a category name');
 
         try {
+            // Read the token from the meta tag set by _AdminLayout
+            const token = document.querySelector('meta[name="admin-token"]')?.content ?? '';
+            
             const res = await fetch(`${apiBaseUrl}/api/categories`, {
                 method: 'POST',
                 headers: {

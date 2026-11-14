@@ -99,6 +99,7 @@ public static class DependencyInjection
         });
         // Register all application-layer interface implementations.
         services.AddScoped<IAuthService, AuthService>();
+        services.AddHttpClient(); // Ensure HttpClientFactory is registered
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IPaymentService, PaymentService>();
         services.AddScoped<IProductRepository, ProductRepository>();

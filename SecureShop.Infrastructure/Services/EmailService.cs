@@ -1,67 +1,104 @@
-using System.Net;
-using System.Net.Mail;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using SecureShop.Application.Interfaces;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Mail;
+using System.Text;
+using System.Text.Json;
 
 namespace SecureShop.Infrastructure.Services;
 
-/// <summary>
-/// SMTP email sender. Configure via Email:* settings (or Railway env vars
-/// Email__SmtpHost, Email__SmtpPort, Email__SmtpUser, Email__SmtpPassword, Email__FromName).
-/// </summary>
 public class EmailService : IEmailService
 {
     private readonly IConfiguration _config;
     private readonly ILogger<EmailService> _logger;
+    private readonly IHttpClientFactory _httpClientFactory;
 
-    /// <summary>Injects application configuration and a structured logger.</summary>
-    public EmailService(IConfiguration config, ILogger<EmailService> logger)
+    public EmailService(IConfiguration config, ILogger<EmailService> logger, IHttpClientFactory httpClientFactory)
     {
         _config = config;
         _logger = logger;
+        _httpClientFactory = httpClientFactory;
     }
 
-    /// <summary>
-    /// Sends an HTML email via SMTP.
-    /// Uses implicit SSL (port 465) or STARTTLS (port 587) depending on the configured port.
-    /// If SMTP credentials are not configured, logs a warning and returns without throwing.
-    /// </summary>
-    /// <param name="toEmail">Recipient email address.</param>
-    /// <param name="subject">Email subject line.</param>
-    /// <param name="htmlBody">Full HTML email body.</param>
     public async Task SendAsync(string toEmail, string subject, string htmlBody)
     {
-        var host     = _config["Email:SmtpHost"] ?? "smtp.gmail.com";
-        var port     = int.TryParse(_config["Email:SmtpPort"], out var p) ? p : 587;
-        var user     = _config["Email:SmtpUser"];
-        var password = _config["Email:SmtpPassword"];
-        var fromName = _config["Email:FromName"] ?? "SecureShop";
+        var resendApiKey = _config["Email:ResendApiKey"];
+        var fromEmail = _config["Email:FromEmail"] ?? "onboarding@resend.dev";
 
-        if (string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(password))
+        // If a Resend API key is configured, use the HTTP API (works on Railway)
+        if (!string.IsNullOrWhiteSpace(resendApiKey))
         {
-            _logger.LogWarning("Email not sent to {To} — SMTP credentials not configured (Email:SmtpUser / Email:SmtpPassword).", toEmail);
+            await SendViaResendAsync(resendApiKey, fromEmail, toEmail, subject, htmlBody);
             return;
         }
 
-        using var message = new MailMessage();
-        message.From    = new MailAddress(user, fromName);
-        message.Subject = subject;
-        message.Body    = htmlBody;
-        message.IsBodyHtml = true;
-        message.To.Add(toEmail);
+        // Fallback to SMTP (works locally, often blocked on cloud providers)
+        await SendViaSmtpAsync(toEmail, subject, htmlBody);
+    }
 
-        // Port 465 uses implicit SSL; port 587 uses STARTTLS.
-        // Railway blocks outbound 587 on free tier — prefer 465.
-        using var smtp = new SmtpClient(host, port)
+    private async Task SendViaResendAsync(string apiKey, string fromEmail, string toEmail, string subject, string htmlBody)
+    {
+        var client = _httpClientFactory.CreateClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+
+        var payload = new
         {
-            EnableSsl   = port != 587,
-            Credentials = new NetworkCredential(user, password),
-            DeliveryMethod = SmtpDeliveryMethod.Network,
-            Timeout = 10000
+            from = $"SecureShop <{fromEmail}>",
+            to = new[] { toEmail },
+            subject = subject,
+            html = htmlBody
         };
 
-        await smtp.SendMailAsync(message);
-        _logger.LogInformation("Email sent → {To}: {Subject}", toEmail, subject);
+        var json = JsonSerializer.Serialize(payload);
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        var response = await client.PostAsync("https://api.resend.com/emails", content);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync();
+            _logger.LogError("Resend API failed: {StatusCode} - {Error}", response.StatusCode, error);
+            throw new InvalidOperationException($"Failed to send email via Resend: {error}");
+        }
+
+        _logger.LogInformation("Email sent successfully via Resend to {Email}", toEmail);
+    }
+
+    private async Task SendViaSmtpAsync(string toEmail, string subject, string htmlBody)
+    {
+        var smtpHost = _config["Email:SmtpHost"];
+        var smtpPort = int.Parse(_config["Email:SmtpPort"] ?? "587");
+        var smtpUser = _config["Email:SmtpUser"];
+        var smtpPass = _config["Email:SmtpPassword"];
+        var fromName = _config["Email:FromName"] ?? "SecureShop";
+        
+        // FIX: Ensure fromEmail is never null to satisfy the compiler
+        var fromEmail = smtpUser ?? "noreply@secureshop.com";
+
+        if (string.IsNullOrWhiteSpace(smtpUser) || string.IsNullOrWhiteSpace(smtpPass))
+        {
+            _logger.LogWarning("Email not sent to {Email} — SMTP credentials not configured.", toEmail);
+            return;
+        }
+
+        using var client = new SmtpClient(smtpHost, smtpPort)
+        {
+            Credentials = new NetworkCredential(smtpUser, smtpPass),
+            EnableSsl = true
+        };
+
+        var mailMessage = new MailMessage
+        {
+            From = new MailAddress(fromEmail, fromName),
+            Subject = subject,
+            Body = htmlBody,
+            IsBodyHtml = true
+        };
+        mailMessage.To.Add(toEmail);
+
+        await client.SendMailAsync(mailMessage);
+        _logger.LogInformation("Email sent successfully via SMTP to {Email}", toEmail);
     }
 }
