@@ -18,8 +18,6 @@ public class TwoFactorModel : AdminPageModel
         _signInManager = signInManager;
     }
 
-    // ... rest of your file
-
     public bool IsEnabled { get; private set; }
     public string? SetupKey { get; private set; }
     public string? AuthenticatorUri { get; private set; }

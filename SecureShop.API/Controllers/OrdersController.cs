@@ -102,21 +102,30 @@ public class OrdersController : ControllerBase
     /// Exports all orders as a CSV file (admin only).
     /// </summary>
     [HttpGet("export")]
-    [Authorize(AuthenticationSchemes = "Bearer", Roles = "Admin")]
+    [Authorize(AuthenticationSchemes = "AdminCookie,Bearer", Roles = "Admin")]
     public async Task<IActionResult> ExportCsv()
     {
-        var orders = await _svc.GetAllOrdersAsync();
-        
-        var csv = new StringBuilder();
-        csv.AppendLine("Order ID,Date,Customer,Status,Total Amount");
-        
-        foreach (var order in orders)
+        try
         {
-            csv.AppendLine($"{order.Id},{order.CreatedAt:yyyy-MM-dd HH:mm},{order.CustomerEmail},{order.Status},{order.TotalAmount}");
+            var orders = await _svc.GetAllOrdersAsync();
+            
+            var csv = new StringBuilder();
+            csv.AppendLine("Order ID,Date,Customer,Status,Total Amount");
+            
+            foreach (var order in orders)
+            {
+                // Escaping customer email with quotes to prevent CSV column breaks
+                csv.AppendLine($"{order.Id},{order.CreatedAt:yyyy-MM-dd HH:mm},\"{order.CustomerEmail}\",{order.Status},{order.TotalAmount}");
+            }
+            
+            var bytes = Encoding.UTF8.GetBytes(csv.ToString());
+            return File(bytes, "text/csv", $"orders-{DateTime.UtcNow:yyyyMMdd}.csv");
         }
-        
-        var bytes = Encoding.UTF8.GetBytes(csv.ToString());
-        return File(bytes, "text/csv", $"orders-{DateTime.UtcNow:yyyyMMdd}.csv");
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting orders");
+            return StatusCode(500, new { message = "An error occurred while exporting orders" });
+        }
     }
 
     /// <summary>
