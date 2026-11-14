@@ -7,11 +7,6 @@ using SecureShop.Domain.Entities;
 
 namespace SecureShop.API.Pages.Admin;
 
-/// <summary>
-/// Admin self-service TOTP enrollment: setup key display, enable/disable with
-/// password confirmation, and recovery-code generation. Requires the
-/// AdminCookie session via <see cref="AdminPageModel"/>.
-/// </summary>
 public class TwoFactorModel : AdminPageModel
 {
     private readonly UserManager<ApplicationUser> _userManager;
@@ -22,6 +17,8 @@ public class TwoFactorModel : AdminPageModel
         _userManager = userManager;
         _signInManager = signInManager;
     }
+
+    // ... rest of your file
 
     public bool IsEnabled { get; private set; }
     public string? SetupKey { get; private set; }

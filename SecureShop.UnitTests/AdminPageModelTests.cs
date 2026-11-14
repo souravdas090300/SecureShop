@@ -667,12 +667,12 @@ public class AdminLoginModelPostTests
 
 public class AdminPageModelFilterTests
 {
-    private static (DefaultHttpContext ctx, AdminIndexModel model) CreateWithAuthResult(
+        private static (DefaultHttpContext ctx, AdminIndexModel model) CreateWithAuthResult(
         AuthenticateResult authResult)
     {
         var authSvc = new Mock<IAuthenticationService>();
         authSvc.Setup(s => s.AuthenticateAsync(It.IsAny<HttpContext>(), "AdminCookie"))
-               .ReturnsAsync(authResult);
+            .ReturnsAsync(authResult);
         authSvc.Setup(s => s.SignInAsync(
                 It.IsAny<HttpContext>(), It.IsAny<string?>(),
                 It.IsAny<ClaimsPrincipal>(), It.IsAny<AuthenticationProperties?>()))
@@ -682,8 +682,19 @@ public class AdminPageModelFilterTests
                 It.IsAny<AuthenticationProperties?>()))
             .Returns(Task.CompletedTask);
 
+        // 👇 Register IConfiguration with a valid Jwt secret
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Jwt:Secret"] = "test-secret-key-for-unit-tests-32+",
+                ["Jwt:Issuer"] = "SecureShop",
+                ["Jwt:Audience"] = "SecureShopUsers"
+            })
+            .Build();
+
         var sp = new ServiceCollection()
             .AddSingleton(authSvc.Object)
+            .AddSingleton<IConfiguration>(config)  // 👈 ADD THIS
             .BuildServiceProvider();
 
         var httpContext = new DefaultHttpContext { RequestServices = sp };
