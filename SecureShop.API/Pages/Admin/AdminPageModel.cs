@@ -38,6 +38,7 @@ public class AdminPageModel : PageModel
         PageHandlerExecutingContext context, PageHandlerExecutionDelegate next)
     {
         var result = await context.HttpContext.AuthenticateAsync("AdminCookie");
+        Console.WriteLine($"AdminPageModel auth: {result.Succeeded}");
 
         if (!result.Succeeded || result.Principal?.IsInRole("Admin") != true)
         {

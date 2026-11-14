@@ -144,7 +144,7 @@ builder.Services.AddAuthentication(options =>
         options.SlidingExpiration = true;
         options.Cookie.HttpOnly = true;
         options.Cookie.SecurePolicy = cookieSecurePolicy;
-        options.Cookie.SameSite = SameSiteMode.Strict;
+        options.Cookie.SameSite = SameSiteMode.Lax;
         options.Cookie.IsEssential = true;
         options.Events = new CookieAuthenticationEvents
         {
@@ -207,7 +207,6 @@ builder.Services.AddAuthorization(options =>
     // (AdminCookie has an empty AccessDeniedPath).
     options.AddPolicy("AdminOnly", policy =>
     {
-        policy.AuthenticationSchemes.Add(CookieAuthenticationDefaults.AuthenticationScheme);
         policy.AuthenticationSchemes.Add("AdminCookie");
         policy.RequireRole("Admin");
     });
