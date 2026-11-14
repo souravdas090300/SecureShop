@@ -30,7 +30,7 @@ public class Product
     /// <summary>Optional URL of the product's primary image.</summary>
     public string? ImageUrl { get; private set; }
 
-    /// <summary>Additional details about the product.</summary>
+    /// <summary>Optional full specifications / technical details.</summary>
     public string? Details { get; set; }
 
     /// <summary>
@@ -45,25 +45,21 @@ public class Product
     /// <summary>UTC timestamp of the most recent update.</summary>
     public DateTime UpdatedAt { get; private set; }
 
-
     // EF Core requires a parameterless constructor for materialisation.
     private Product() { }
 
     /// <summary>
     /// Factory method — creates a new active <see cref="Product"/> after validating all invariants.
     /// </summary>
-    /// <param name="name">Non-empty display name.</param>
-    /// <param name="description">Product description (may be empty).</param>
-    /// <param name="price">Must be greater than zero.</param>
-    /// <param name="stock">Must be zero or more.</param>
-    /// <param name="category">Category name used for filtering.</param>
-    /// <param name="imageUrl">Optional URL pointing to the product image.</param>
-    /// <returns>A new, active <see cref="Product"/>.</returns>
-    /// <exception cref="DomainException">Thrown when any invariant is violated.</exception>
-    public static Product Create(string name, string description,
-        decimal price, int stock, string category, string? imageUrl = null)
+    public static Product Create(
+        string name,
+        string description,
+        decimal price,
+        int stock,
+        string category,
+        string? imageUrl = null,
+        string? details = null)
     {
-        // Validate all business rules before constructing the object.
         if (string.IsNullOrWhiteSpace(name))
             throw new DomainException("Product name is required");
         if (price <= 0)
@@ -80,6 +76,7 @@ public class Product
             StockQuantity = stock,
             Category = category.Trim(),
             ImageUrl = imageUrl,
+            Details = details,
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
@@ -89,32 +86,29 @@ public class Product
     /// <summary>
     /// Updates mutable fields. Enforces the same price/stock invariants as <see cref="Create"/>.
     /// </summary>
-    /// <param name="name">New display name.</param>
-    /// <param name="description">New description.</param>
-    /// <param name="price">New price (must be &gt; 0).</param>
-    /// <param name="category">New category.</param>
-    /// <param name="stockQuantity">New stock level (must be &gt;= 0).</param>
-    /// <param name="imageUrl">New image URL (nullable).</param>
-    /// <exception cref="DomainException">Thrown when price or stock violates invariants.</exception>
-    public void Update(string name, string description, decimal price, string category, int stockQuantity, string? imageUrl)
+    public void Update(
+        string name,
+        string description,
+        decimal price,
+        string category,
+        int stockQuantity,
+        string? imageUrl,
+        string? details = null)
     {
         if (price <= 0) throw new DomainException("Price must be greater than zero");
         if (stockQuantity < 0) throw new DomainException("Stock cannot be negative");
+
         Name = name.Trim();
         Description = description.Trim();
         Price = price;
         Category = category.Trim();
         StockQuantity = stockQuantity;
         ImageUrl = imageUrl;
+        Details = details;
         UpdatedAt = DateTime.UtcNow;
     }
 
-    /// <summary>
-    /// Decrements stock by <paramref name="quantity"/> units.
-    /// Called during order creation to reserve inventory.
-    /// </summary>
-    /// <param name="quantity">Number of units to deduct.</param>
-    /// <exception cref="DomainException">Thrown when requested quantity exceeds available stock.</exception>
+    /// <summary>Decrements stock by <paramref name="quantity"/> units.</summary>
     public void ReduceStock(int quantity)
     {
         if (quantity <= 0)
@@ -134,9 +128,6 @@ public class Product
         UpdatedAt = DateTime.UtcNow;
     }
 
-    /// <summary>
-    /// Soft-deletes the product by setting <see cref="IsActive"/> to <c>false</c>.
-    /// The record is retained in the database for order history references.
-    /// </summary>
+    /// <summary>Soft-deletes the product by setting <see cref="IsActive"/> to <c>false</c>.</summary>
     public void Deactivate() { IsActive = false; UpdatedAt = DateTime.UtcNow; }
 }

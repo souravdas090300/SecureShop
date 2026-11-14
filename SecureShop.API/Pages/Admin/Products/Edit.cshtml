@@ -146,7 +146,7 @@ async function loadProduct() {
                     <input type="number" class="form-control" id="productStock" value="${p.stockQuantity}"></div>
                 <div class="col-md-6"><label class="form-label fw-semibold">Category <span class="text-danger">*</span></label>
                     <select class="form-select" id="productCategory">
-                        ${['Electronics','Clothing','Books','Home','Sports'].map(c=>`<option ${c===p.category?'selected':''}>${c}</option>`).join('')}
+                        <option value="${p.category}">${p.category}</option>
                     </select></div>
                 <div class="col-12 d-flex gap-2 mt-2">
                     <button class="btn btn-primary" onclick="updateProduct()" id="submitBtn">
@@ -155,6 +155,9 @@ async function loadProduct() {
                     <a href="/admin/products" class="btn btn-outline-secondary">Cancel</a>
                 </div>
             </div>`;
+
+        // Load categories from the API
+        await loadCategoryDropdown(p.category);
 
         // Pre-populate image panel
         const imageUrl = p.imageUrl || '';
@@ -171,10 +174,23 @@ async function loadProduct() {
     }
 }
 
+async function loadCategoryDropdown(currentValue) {
+    const select = document.getElementById('productCategory');
+    try {
+        const res = await fetch(`${apiBaseUrl}/api/categories`);
+        if (!res.ok) return;
+        const categories = await res.json();
+        const selected = currentValue || select.value;
+        select.innerHTML = '<option value="">Select category...</option>' +
+            categories.map(c => `<option value="${c.name}" ${c.name === selected ? 'selected' : ''}>${c.name}</option>`).join('');
+    } catch (e) {
+        console.error('Failed to load categories', e);
+    }
+}
+
 async function updateProduct() {
     const name        = document.getElementById('productName').value.trim();
     const description = document.getElementById('productDescription').value.trim();
-    const details     = document.getElementById('productDetails').value.trim();
     const price       = parseFloat(document.getElementById('productPrice').value);
     const stock       = parseInt(document.getElementById('productStock').value);
     const category    = document.getElementById('productCategory').value;
