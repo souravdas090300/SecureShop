@@ -1,4 +1,4 @@
-@page "/account/verify-email"
+@page
 @model SecureShop.API.Pages.Account.VerifyEmailModel
 @{
     ViewData["Title"] = "Verify Email";
@@ -6,62 +6,59 @@
 
 <div class="container py-5">
     <div class="row justify-content-center">
-        <div class="col-md-5 col-lg-4">
-            <div class="card shadow-lg border-0">
+        <div class="col-md-5">
+            <div class="card shadow-sm border-0">
                 <div class="card-body p-5 text-center">
-                    <div class="mb-4">
-                        <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
-                             style="width:72px;height:72px;background:linear-gradient(135deg,#3b82f6,#2563eb);">
-                            <i class="fas fa-envelope-open-text text-white" style="font-size:2rem;"></i>
-                        </div>
-                        <h2 class="fw-bold">Check your email</h2>
-                        <p class="text-muted">
-                            We sent a 6-digit code to<br>
-                            <strong>@Model.Email</strong>
-                        </p>
+                    
+                    <div class="rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
+                         style="width:64px;height:64px;background:#e0e7ff;color:#4f46e5;font-size:1.5rem;">
+                        <i class="fas fa-envelope-open-text"></i>
                     </div>
 
-                    @if (Model.ErrorMessage != null)
+                    <h3 class="fw-bold mb-2">Check your email</h3>
+                    <p class="text-muted mb-4">
+                        We sent a 6-digit code to<br />
+                        <strong>@Model.Email</strong>
+                    </p>
+
+                    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
                     {
-                        <div class="alert alert-danger text-start" role="alert">
-                            <i class="fas fa-exclamation-circle"></i> @Model.ErrorMessage
-                        </div>
+                        <div class="alert alert-danger py-2">@Model.ErrorMessage</div>
+                    }
+                    @if (!string.IsNullOrEmpty(Model.SuccessMessage))
+                    {
+                        <div class="alert alert-success py-2">@Model.SuccessMessage</div>
                     }
 
                     <form method="post">
-                        <input type="hidden" asp-for="Email" />
-                        <input type="hidden" asp-for="PendingUserId" />
-                        <input type="hidden" asp-for="PendingToken" />
-
+                        @Html.AntiForgeryToken()
                         <div class="mb-4">
                             <label class="form-label fw-semibold">Enter verification code</label>
-                            <input type="text" class="form-control form-control-lg text-center fw-bold"
-                                   asp-for="OtpCode"
-                                   placeholder="000000"
-                                   maxlength="6"
-                                   inputmode="numeric"
-                                   autocomplete="one-time-code"
-                                   style="font-size:2rem;letter-spacing:10px;"
-                                   required />
+                            <input asp-for="OtpCode" class="form-control form-control-lg text-center" 
+                                   style="letter-spacing: 0.5em; font-size: 1.5rem;" 
+                                   placeholder="000000" autocomplete="one-time-code" required />
                         </div>
-
-                        <div class="d-grid mb-3">
-                            <button type="submit" class="btn btn-primary btn-lg">
-                                <i class="fas fa-check-circle me-2"></i>Verify Email
-                            </button>
-                        </div>
+                        <button type="submit" class="btn btn-success btn-lg w-100 mb-3">
+                            <i class="fas fa-check-circle me-2"></i>Verify Email
+                        </button>
                     </form>
 
-                    <p class="text-muted small">
-                        Didn't receive the code?
-                        <a href="/account/register" class="text-decoration-none">Try registering again</a>
-                    </p>
+                    <div class="d-flex justify-content-between align-items-center mt-3">
+                        <span class="text-muted small">Didn't receive the code?</span>
+                        <form method="post" asp-page-handler="Resend">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-link p-0 text-decoration-none small">
+                                Resend Code
+                            </button>
+                        </form>
+                    </div>
 
-                    <div class="text-center mt-3">
-                        <a href="/" class="text-decoration-none text-muted small">
+                    <div class="mt-4 pt-3 border-top">
+                        <a href="/" class="text-muted text-decoration-none small">
                             <i class="fas fa-arrow-left me-1"></i>Back to Home
                         </a>
                     </div>
+
                 </div>
             </div>
         </div>

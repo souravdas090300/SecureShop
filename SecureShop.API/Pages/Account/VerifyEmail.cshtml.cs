@@ -1,136 +1,178 @@
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using System.ComponentModel.DataAnnotations;
-using SecureShop.API.Helpers;
-using SecureShop.Application.Interfaces;
+using Microsoft.AspNetCore.Identity;
 using SecureShop.Domain.Entities;
+using SecureShop.Application.Interfaces;
+using System.ComponentModel.DataAnnotations;
 
 namespace SecureShop.API.Pages.Account;
 
 public class VerifyEmailModel : PageModel
 {
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly IAuthService _authService;
+    private readonly IEmailService _emailService;
     private readonly ILogger<VerifyEmailModel> _logger;
-    private readonly IWebHostEnvironment _environment;
-
-    [BindProperty] public string Email          { get; set; } = string.Empty;
-    [BindProperty] public string PendingUserId  { get; set; } = string.Empty;
-    [BindProperty] public string PendingToken   { get; set; } = string.Empty;
-
-    [BindProperty]
-    [Required(ErrorMessage = "Please enter the 6-digit code.")]
-    [StringLength(6, MinimumLength = 6, ErrorMessage = "The code must be exactly 6 digits.")]
-    public string OtpCode { get; set; } = string.Empty;
-
-    public string? ErrorMessage { get; set; }
 
     public VerifyEmailModel(
         UserManager<ApplicationUser> userManager,
-        IAuthService authService,
-        ILogger<VerifyEmailModel> logger,
-        IWebHostEnvironment environment)
+        IEmailService emailService,
+        ILogger<VerifyEmailModel> logger)
     {
         _userManager = userManager;
-        _authService = authService;
+        _emailService = emailService;
         _logger = logger;
-        _environment = environment;
     }
+
+    [BindProperty]
+    [Required(ErrorMessage = "Please enter the 6-digit code")]
+    [StringLength(6, MinimumLength = 6, ErrorMessage = "Code must be exactly 6 digits")]
+    public string OtpCode { get; set; } = string.Empty;
+
+    public string? Email { get; set; }
+    public string? ErrorMessage { get; set; }
+    public string? SuccessMessage { get; set; }
 
     public IActionResult OnGet()
     {
-        Email         = TempData["PendingEmail"]?.ToString()  ?? string.Empty;
-        PendingUserId = TempData["PendingUserId"]?.ToString() ?? string.Empty;
+        // Retrieve the pending email from TempData
+        Email = TempData["PendingEmail"]?.ToString();
+        SuccessMessage = TempData["SuccessMessage"]?.ToString();
 
         if (string.IsNullOrEmpty(Email))
         {
-            // Arrived here without context — redirect to register.
+            // If no email in TempData, they shouldn't be here.
             return RedirectToPage("/Account/Register");
         }
+
+        // Keep it in TempData for the next request
+        TempData.Keep("PendingEmail");
         return Page();
     }
 
     public async Task<IActionResult> OnPostAsync()
     {
-        if (!ModelState.IsValid)
-            return Page();
-
-        if (string.IsNullOrEmpty(Email) || string.IsNullOrEmpty(PendingUserId))
+        Email = TempData["PendingEmail"]?.ToString();
+        if (string.IsNullOrEmpty(Email))
         {
-            ErrorMessage = "Session expired. Please register again.";
+            return RedirectToPage("/Account/Register");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            TempData.Keep("PendingEmail");
             return Page();
         }
 
-        var user = await _userManager.FindByIdAsync(PendingUserId);
+        var user = await _userManager.FindByEmailAsync(Email);
         if (user == null)
         {
-            ErrorMessage = "Account not found. Please register again.";
+            ErrorMessage = "User not found.";
+            TempData.Keep("PendingEmail");
             return Page();
         }
 
-        var stored = await _userManager.GetAuthenticationTokenAsync(user, "SecureShop", "EmailVerifyOTP");
-        if (string.IsNullOrEmpty(stored))
+        // 1. Retrieve the stored OTP
+        var storedToken = await _userManager.GetAuthenticationTokenAsync(user, "SecureShop", "EmailVerifyOTP");
+        if (string.IsNullOrEmpty(storedToken))
         {
-            ErrorMessage = "Verification code has expired. Please register again.";
+            ErrorMessage = "No verification code found. Please register again.";
+            TempData.Keep("PendingEmail");
             return Page();
         }
 
-        var parts      = stored.Split('|', 2);
-        var storedCode = parts[0];
-        var expired    = parts.Length < 2 || !DateTime.TryParse(parts[1], null,
-                             System.Globalization.DateTimeStyles.RoundtripKind, out var expiry)
-                         || DateTime.UtcNow > expiry;
-
-        if (expired)
+        var parts = storedToken.Split('|');
+        if (parts.Length != 2)
         {
-            await _userManager.RemoveAuthenticationTokenAsync(user, "SecureShop", "EmailVerifyOTP");
-            ErrorMessage = "Verification code has expired. Please register again.";
+            ErrorMessage = "Invalid verification state. Please register again.";
+            TempData.Keep("PendingEmail");
             return Page();
         }
 
-        if (!string.Equals(OtpCode.Trim(), storedCode, StringComparison.Ordinal))
+        var validOtp = parts[0];
+        var expiryStr = parts[1];
+
+        // 2. Check Expiry
+        if (DateTime.TryParse(expiryStr, out var expiry) && DateTime.UtcNow > expiry)
         {
-            ErrorMessage = "Incorrect code. Please try again.";
+            ErrorMessage = "The verification code has expired. Please click 'Resend Code'.";
+            TempData.Keep("PendingEmail");
             return Page();
         }
 
-        // Code is valid — confirm email and clean up token.
-        await _userManager.RemoveAuthenticationTokenAsync(user, "SecureShop", "EmailVerifyOTP");
+        // 3. Verify the Code
+        if (OtpCode != validOtp)
+        {
+            ErrorMessage = "Invalid verification code. Please try again.";
+            TempData.Keep("PendingEmail");
+            return Page();
+        }
+
+        // 4. Success! Confirm the email
         user.EmailConfirmed = true;
         await _userManager.UpdateAsync(user);
+        
+        // Clean up the token
+        await _userManager.RemoveAuthenticationTokenAsync(user, "SecureShop", "EmailVerifyOTP");
 
-        _logger.LogInformation("Email verified for {Email}", user.Email);
-
-        // Generate JWT and sign in.
-        var authResult = await _authService.GenerateTokenForUserAsync(user.Id);
-
-        var cookieOptions = AuthTokenCookieHelper.Create(
-            HttpContext,
-            _environment,
-            DateTimeOffset.UtcNow.AddHours(8));
-        Response.Cookies.Append("AuthToken", authResult.Token, cookieOptions);
-
-        var principal = JwtCookieHelper.BuildPrincipal(
-            authResult.Token,
-            overrideEmail:     authResult.Email,
-            overrideFirstName: authResult.FirstName,
-            overrideLastName:  authResult.LastName);
-
-        await HttpContext.SignInAsync(
-            CookieAuthenticationDefaults.AuthenticationScheme,
-            principal,
-            new AuthenticationProperties
-            {
-                IsPersistent = true,
-                ExpiresUtc   = DateTimeOffset.UtcNow.AddHours(8),
-                AllowRefresh = true
-            });
-
-        TempData["SuccessMessage"] = $"Welcome {authResult.FirstName}! Your email has been verified.";
-        return Redirect("/");
+        TempData["SuccessMessage"] = "Email verified successfully! You can now log in.";
+        return RedirectToPage("/Account/Login");
     }
+
+    public async Task<IActionResult> OnPostResendAsync()
+    {
+        Email = TempData["PendingEmail"]?.ToString();
+        if (string.IsNullOrEmpty(Email))
+        {
+            return RedirectToPage("/Account/Register");
+        }
+
+        var user = await _userManager.FindByEmailAsync(Email);
+        if (user == null)
+        {
+            return RedirectToPage("/Account/Register");
+        }
+
+        // Generate a new OTP
+        var otp = Random.Shared.Next(100_000, 999_999).ToString();
+        var expiry = DateTime.UtcNow.AddMinutes(15).ToString("O");
+        
+        await _userManager.SetAuthenticationTokenAsync(
+            user, "SecureShop", "EmailVerifyOTP", $"{otp}|{expiry}");
+
+        try
+        {
+            await _emailService.SendAsync(
+                Email,
+                "Your SecureShop verification code",
+                BuildOtpEmail(user.FirstName, otp));
+            
+            SuccessMessage = $"A new 6-digit code has been sent to {Email}.";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to resend OTP email to {Email}", Email);
+            ErrorMessage = "Failed to send email. Please try again later.";
+        }
+
+        TempData.Keep("PendingEmail");
+        return Page();
+    }
+
+    private static string BuildOtpEmail(string firstName, string otp) => $"""
+        <!DOCTYPE html>
+        <html>
+        <body style="font-family:Arial,sans-serif;background:#f4f4f4;padding:20px;">
+          <div style="max-width:480px;margin:auto;background:#fff;border-radius:10px;padding:40px;">
+            <h2 style="color:#2563eb;">Verify your email</h2>
+            <p>Hi {System.Net.WebUtility.HtmlEncode(firstName)},</p>
+            <p>Use the code below to complete your SecureShop sign-up. It expires in <strong>15 minutes</strong>.</p>
+            <div style="font-size:40px;font-weight:bold;letter-spacing:12px;text-align:center;
+                        background:#f1f5f9;border-radius:8px;padding:20px 0;margin:24px 0;color:#1e293b;">
+              {otp}
+            </div>
+            <p style="color:#64748b;font-size:0.875rem;">If you didn't create an account, you can ignore this email.</p>
+          </div>
+        </body>
+        </html>
+        """;
 }
