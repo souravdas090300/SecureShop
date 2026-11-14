@@ -1,6 +1,8 @@
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using System.Security.Claims;
 using SecureShop.Domain.Entities;
 
 namespace SecureShop.API.Pages.Admin;
@@ -29,9 +31,15 @@ public class TwoFactorModel : AdminPageModel
     public string? Message { get; private set; }
     public bool IsError { get; private set; }
 
+    /// <summary>
+    /// Loads the signed-in admin from the <c>AdminCookie</c> scheme.
+    /// </summary>
     private async Task<ApplicationUser?> CurrentAdminAsync()
     {
-        var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var result = await HttpContext.AuthenticateAsync("AdminCookie");
+        if (!result.Succeeded) return null;
+
+        var userId = result.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         return userId is null ? null : await _userManager.FindByIdAsync(userId);
     }
 
