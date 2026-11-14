@@ -1,0 +1,98 @@
+@page "/admin/adminusers"
+@model SecureShop.API.Pages.Admin.AdminUsersModel
+@{ ViewData["Title"] = "Admin Users"; }
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-1"><i class="fas fa-user-shield me-2"></i>Admin Users</h2>
+        <nav aria-label="breadcrumb"><ol class="breadcrumb mb-0">
+            <li class="breadcrumb-item"><a href="/admin">Dashboard</a></li>
+            <li class="breadcrumb-item active">Admin Users</li>
+        </ol></nav>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(Model.StatusMessage))
+{
+    <div class="alert alert-success alert-dismissible fade show">
+        @Model.StatusMessage
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+@if (!string.IsNullOrEmpty(Model.ErrorMessage))
+{
+    <div class="alert alert-danger alert-dismissible fade show">
+        @Model.ErrorMessage
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <h5 class="fw-bold mb-3">Add administrator</h5>
+                <form method="post" asp-page-handler="Add">
+                    @Html.AntiForgeryToken()
+                    <label class="form-label" for="email">Email of a registered account</label>
+                    <input type="email" class="form-control" id="email" name="email" required maxlength="256">
+                    <div class="form-text mb-3">The account must already exist and have a confirmed email.</div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-user-plus me-2"></i>Make administrator
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h5 class="fw-bold mb-3">Administrators (@Model.Admins.Count)</h5>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle">
+                        <thead class="table-light">
+                            <tr><th>Name</th><th>Email</th><th>Two-factor</th><th>Joined</th><th></th></tr>
+                        </thead>
+                        <tbody>
+                        @foreach (var admin in Model.Admins)
+                        {
+                            <tr>
+                                <td>@($"{admin.FirstName} {admin.LastName}".Trim())</td>
+                                <td>@admin.Email</td>
+                                <td>
+                                    @if (admin.TwoFactorEnabled)
+                                    {
+                                        <span class="badge bg-success">On</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">Off</span>
+                                    }
+                                </td>
+                                <td>@admin.CreatedAt.ToString("yyyy-MM-dd")</td>
+                                <td class="text-end">
+                                    @if (admin.Id == Model.CurrentUserId)
+                                    {
+                                        <span class="text-muted small">You</span>
+                                    }
+                                    else
+                                    {
+                                        <form method="post" asp-page-handler="Remove" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@admin.Id">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                    onclick="return confirm('Remove administrator access for this account?');">
+                                                Remove
+                                            </button>
+                                        </form>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
