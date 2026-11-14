@@ -148,6 +148,8 @@ public class AdminLoginModel : PageModel
             new(ClaimTypes.NameIdentifier, user.Id),
             new(ClaimTypes.Email, user.Email!),
             new(ClaimTypes.Name, $"{user.FirstName} {user.LastName}"),
+            new(ClaimTypes.GivenName, user.FirstName),
+            new(ClaimTypes.Surname, user.LastName),
             new("IsAdmin", "true")
         };
         claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));

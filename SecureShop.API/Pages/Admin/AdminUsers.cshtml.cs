@@ -5,7 +5,7 @@ using SecureShop.Domain.Entities;
 
 namespace SecureShop.API.Pages.Admin;
 
-public class AdminUsersModel : PageModel
+public class AdminUsersModel : AdminPageModel
 {
     private const string AdminRole = "Admin";
     private readonly UserManager<ApplicationUser> _users;

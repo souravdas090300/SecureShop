@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using System.Security.Claims;
 
 namespace SecureShop.API.Pages.Admin;
 
@@ -18,6 +19,15 @@ public class AdminPageModel : PageModel
 {
     /// <summary>The display name of the authenticated administrator, shown in the admin layout header.</summary>
     public string AdminName { get; protected set; } = string.Empty;
+
+    /// <summary>The administrator's given (first) name, resolved from the AdminCookie claims.</summary>
+    public string AdminFirstName { get; protected set; } = string.Empty;
+
+    /// <summary>The administrator's family (last) name, resolved from the AdminCookie claims.</summary>
+    public string AdminLastName { get; protected set; } = string.Empty;
+
+    /// <summary>The administrator's email address, resolved from the AdminCookie claims.</summary>
+    public string AdminEmail { get; protected set; } = string.Empty;
 
     /// <summary>
     /// Validates the <c>AdminCookie</c> identity before any page handler runs.
@@ -36,7 +46,12 @@ public class AdminPageModel : PageModel
             return;
         }
 
-        AdminName = result.Principal.Identity?.Name ?? "Administrator";
+        // Populate admin identity for every admin page.
+        AdminName      = result.Principal.Identity?.Name ?? "Administrator";
+        AdminFirstName = result.Principal.FindFirstValue(ClaimTypes.GivenName) ?? string.Empty;
+        AdminLastName  = result.Principal.FindFirstValue(ClaimTypes.Surname) ?? string.Empty;
+        AdminEmail     = result.Principal.FindFirstValue(ClaimTypes.Email) ?? string.Empty;
+
         await next();
     }
 }

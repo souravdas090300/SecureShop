@@ -29,13 +29,13 @@
 
                 <dl class="row mb-0">
                     <dt class="col-sm-4 text-muted">First Name</dt>
-                    <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.FirstName) ? "—" : Model.FirstName)</dd>
+                    <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.AdminFirstName) ? "—" : Model.AdminFirstName)</dd>
 
                     <dt class="col-sm-4 text-muted">Last Name</dt>
-                    <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.LastName) ? "—" : Model.LastName)</dd>
+                    <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.AdminLastName) ? "—" : Model.AdminLastName)</dd>
 
                     <dt class="col-sm-4 text-muted">Email</dt>
-                    <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.Email) ? "—" : Model.Email)</dd>
+                    <dd class="col-sm-8">@(string.IsNullOrEmpty(Model.AdminEmail) ? "—" : Model.AdminEmail)</dd>
 
                     <dt class="col-sm-4 text-muted">Role</dt>
                     <dd class="col-sm-8"><span class="badge bg-danger">Admin</span></dd>
