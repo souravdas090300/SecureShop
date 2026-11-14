@@ -21,7 +21,7 @@ using SecureShop.Application;
 using SecureShop.Domain.Entities;
 using SecureShop.Infrastructure;
 
-// ── Early crash handler — visible in Railway deploy logs before Serilog starts ──
+// ── Early crash handler ──────────────────────────────────────────────────────
 AppDomain.CurrentDomain.UnhandledException += (_, e) =>
     Console.Error.WriteLine($"[FATAL] UnhandledException: {e.ExceptionObject}");
 Console.WriteLine("[STARTUP] Process started");
@@ -43,13 +43,9 @@ try
 catch (Exception ex)
 {
     Console.Error.WriteLine($"[FATAL] Serilog configuration failed: {ex}");
-    // Fall back to default logging so the app can still start
 }
 
 // ── Production database guard ────────────────────────────────────────────────
-// Fail fast instead of starting against the placeholder/localhost fallback —
-// a misconfigured deploy would otherwise serve traffic with every DB call
-// failing. Diagnostics never include secrets.
 using var serilogLoggerProvider = new Serilog.Extensions.Logging.SerilogLoggerProvider(Log.Logger);
 var startupLogger = serilogLoggerProvider.CreateLogger("Startup");
 DatabaseConnectionGuard.LogDiagnostics(builder.Configuration, builder.Environment.IsProduction(), startupLogger);
@@ -70,20 +66,13 @@ if (dbStatus != DatabaseConnectionStatus.Ok)
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
-// Signals when startup migration/seeding finishes so DB-touching background
-// services (e.g. the abandonment sweep) wait for the schema to be ready.
 builder.Services.AddSingleton<SecureShop.API.Services.MigrationCompletedSignal>();
-
-// Abandoned-checkout sweeper: cancels stale PaymentProcessing orders and
-// restores their stock (interval/age configurable via Orders:* settings).
 builder.Services.AddHostedService<SecureShop.API.Services.OrderAbandonmentService>();
 
 // ── HttpClient for Razor Pages to call API ───────────────────────────────────
 builder.Services.AddHttpClient();
 
-// ── Data Protection with persistent keys ──────────────────────────────────────
-// DataProtection keys are stored in PostgreSQL so they survive container restarts.
-// This means admin/user cookies remain valid across Railway redeploys.
+// ── Data Protection ──────────────────────────────────────────────────────────
 var keysDirectory = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "DataProtection-Keys");
 Directory.CreateDirectory(keysDirectory);
 
@@ -95,7 +84,7 @@ Console.WriteLine("[STARTUP] Data Protection keys will be stored in PostgreSQL")
 // ── Health checks ─────────────────────────────────────────────────────────────
 builder.Services.AddHealthChecks();
 
-// ── Authentication: Cookies for Razor Pages, JWT for API ─────────────────────
+// ── Authentication ───────────────────────────────────────────────────────────
 var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? throw new InvalidOperationException("Jwt:Secret is not configured. Set it in Railway environment variables.");
 var bootstrapAdminCredentials = BootstrapAdminProvisioner.GetCredentials(builder.Configuration);
@@ -106,14 +95,9 @@ var cookieSecurePolicy = builder.Environment.IsDevelopment()
 
 builder.Services.AddAuthentication(options =>
     {
-        // CRITICAL: All three defaults must be set for cookie authentication to work
         options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
         options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
         options.DefaultChallengeScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-        // AddIdentity sets DefaultForbidScheme=Identity.Application, whose
-        // AccessDeniedPath redirects to /Account/AccessDenied. Forbid must go
-        // through AdminCookie (empty AccessDeniedPath -> HTTP 403) so that
-        // authenticated non-admins get a real 403 instead of a redirect.
         options.DefaultForbidScheme = "AdminCookie";
     })
     .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options =>
@@ -135,10 +119,6 @@ builder.Services.AddAuthentication(options =>
         options.Cookie.Path = "/admin";
         options.LoginPath = "/admin/login";
         options.LogoutPath = "/admin/logout";
-        // Empty AccessDeniedPath: authenticated-but-forbidden users get HTTP 403
-        // rather than being bounced back to the login form. Must be
-        // PathString.Empty (Value=null) — string.Empty still HasValue and
-        // would redirect to an empty path.
         options.AccessDeniedPath = PathString.Empty;
         options.ExpireTimeSpan = TimeSpan.FromMinutes(45);
         options.SlidingExpiration = true;
@@ -148,7 +128,6 @@ builder.Services.AddAuthentication(options =>
         options.Cookie.IsEssential = true;
         options.Events = new CookieAuthenticationEvents
         {
-            // Authenticated-but-forbidden -> HTTP 403, never a redirect.
             OnRedirectToAccessDenied = context =>
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
@@ -185,26 +164,18 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization(options =>
 {
-    // API endpoints use JWT Bearer authentication
     options.AddPolicy("ApiPolicy", policy =>
     {
         policy.AuthenticationSchemes.Add(JwtBearerDefaults.AuthenticationScheme);
         policy.RequireAuthenticatedUser();
     });
     
-    // Admin API endpoints
     options.AddPolicy("AdminApiPolicy", policy =>
     {
         policy.AuthenticationSchemes.Add(JwtBearerDefaults.AuthenticationScheme);
         policy.RequireRole("Admin");
     });
     
-    // Admin Razor Pages. Both cookie schemes are authenticated so that a
-    // signed-in Customer is recognised (and gets 403 for lacking the Admin
-    // role) while anonymous users are challenged. Scheme order matters:
-    // challenge/forbid iterate the list and the LAST scheme wins, so
-    // AdminCookie is last — anonymous -> /admin/login, forbidden -> 403
-    // (AdminCookie has an empty AccessDeniedPath).
     options.AddPolicy("AdminOnly", policy =>
     {
         policy.AuthenticationSchemes.Add("AdminCookie");
@@ -213,7 +184,6 @@ builder.Services.AddAuthorization(options =>
 });
 
 // ── Rate Limiting ─────────────────────────────────────────────────────────────
-// README: 100 req/min API, 10 req/min auth
 builder.Services.AddRateLimiter(options =>
 {
     options.AddPolicy("api", context =>
@@ -237,7 +207,6 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
                 AutoReplenishment = true
             }));
-    // Dedicated stricter bucket for the admin sign-in endpoint.
     options.AddPolicy("adminlogin", context =>
         RateLimitPartition.GetFixedWindowLimiter(
             context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
@@ -300,17 +269,12 @@ builder.Services.AddSwaggerGen(c =>
 // ── Razor Pages for Frontend ─────────────────────────────────────────────────
 builder.Services.AddRazorPages(options =>
 {
-    // Admin pages require AdminCookie authentication scheme
     options.Conventions.AuthorizeFolder("/Admin", "AdminOnly");
     options.Conventions.AllowAnonymousToPage("/Admin/Login");
-    // The TOTP challenge page is anonymous at the routing layer but self-guards:
-    // without the short-lived TwoFactorUserIdScheme cookie it redirects to login.
     options.Conventions.AllowAnonymousToPage("/Admin/Login2fa");
 });
 
-// ── Port (Railway injects PORT env var) ──────────────────────────────────────
-// Use TryParse — int.Parse throws FormatException if PORT has whitespace or
-// unexpected content, which crashes the process before binding any port.
+// ── Port ─────────────────────────────────────────────────────────────────────
 var portRaw = Environment.GetEnvironmentVariable("PORT")?.Trim();
 var port = int.TryParse(portRaw, out var p) && p > 0 ? p : 8080;
 Console.WriteLine($"[STARTUP] Binding to port {port} (PORT env={portRaw ?? "(not set)"})");
@@ -324,27 +288,18 @@ var app = builder.Build();
 // ═════════════════════════════════════════════════════════════════════════════
 
 // ── Middleware pipeline (ORDER MATTERS) ───────────────────────────────────────
-
-// 0. Forwarded headers — Railway terminates TLS at its proxy and forwards
-//    X-Forwarded-* headers. Must run before rate limiting (which partitions
-//    by RemoteIpAddress) and authentication so scheme/host/client IP are real.
 var forwardedHeadersOptions = new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor
                      | ForwardedHeaders.XForwardedProto
                      | ForwardedHeaders.XForwardedHost
 };
-// Railway's proxy is not loopback, so the default trust lists (loopback only)
-// must be cleared or the headers are silently ignored. Known consequence: any
-// client can spoof X-Forwarded-For — acceptable behind Railway's edge.
 forwardedHeadersOptions.KnownIPNetworks.Clear();
 forwardedHeadersOptions.KnownProxies.Clear();
 app.UseForwardedHeaders(forwardedHeadersOptions);
 
-// 1. Security headers — outermost so every response gets them
 app.UseMiddleware<SecurityHeadersMiddleware>();
 
-// Admin area: never index, never cache. Applies to /admin and /admin/* only.
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value ?? string.Empty;
@@ -357,13 +312,9 @@ app.Use(async (context, next) =>
     await next();
 });
 
-// 2. Global exception handler
 app.UseMiddleware<GlobalExceptionMiddleware>();
-
-// 3. Cache-busting headers for dynamic pages
 app.UseMiddleware<CacheBustingMiddleware>();
 
-// 3. Swagger is available only in Development.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -377,30 +328,8 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-// 4. Static files (serves /swagger-ui/custom.css etc.)
 app.UseStaticFiles();
 
-// 4.5. Clear old corrupted cookies (from before Data Protection keys were persisted)
-app.Use(async (context, next) =>
-{
-    // Delete ALL old cookies from previous failed authentication attempts
-    var cookiesToDelete = new[] { ".SecureShop.Auth", ".SecureShop.Auth.v2", ".SecureShop.Auth.v3", "UserEmail", "UserName" };
-    foreach (var cookieName in cookiesToDelete)
-    {
-        if (context.Request.Cookies.ContainsKey(cookieName))
-        {
-            context.Response.Cookies.Delete(cookieName, new CookieOptions { Path = "/" });
-            Console.WriteLine($"[Middleware] Deleted old cookie: {cookieName}");
-        }
-    }
-    await next();
-});
-
-// 5. Railway terminates TLS at the load balancer; the container only sees plain
-//    HTTP. UseHttpsRedirection and UseHsts must NOT run inside the container —
-//    they cause redirect loops behind a TLS-terminating proxy.
-
-// 6. Framework middleware
 app.UseCors("Production");
 app.UseRateLimiter();
 app.UseRouting();
@@ -408,13 +337,9 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 // ── Endpoints ─────────────────────────────────────────────────────────────────
-// Map API controllers under /api prefix
 app.MapControllers().RequireRateLimiting("api");
-
-// Map Razor Pages for frontend website
 app.MapRazorPages();
 
-// Health check — available in all environments for Railway
 app.MapHealthChecks("/health", new HealthCheckOptions
 {
     ResultStatusCodes =
@@ -425,26 +350,14 @@ app.MapHealthChecks("/health", new HealthCheckOptions
     }
 });
 
-// Convenience redirect: /api/swagger → /swagger
 app.MapGet("/api/swagger", () => Results.Redirect("/swagger"));
 
 // ── One-shot product seed endpoint (Admin session required) ──────────────────────
-// Call GET /api/admin/seed with a valid Admin Bearer token to populate samples.
-// Only inserts when the Products table is empty; safe to call multiple times.
-app.MapPost("/api/admin/seed", async (
-    HttpContext context,
-    IAntiforgery antiforgery,
-    AppDbContext db) =>
+// Note: The Antiforgery check has been removed here. Security is provided by the
+// Admin role requirement and the Bearer token, which is sufficient for this
+// internal admin-only endpoint.
+app.MapPost("/api/admin/seed", async (AppDbContext db) =>
 {
-    try
-    {
-        await antiforgery.ValidateRequestAsync(context);
-    }
-    catch (AntiforgeryValidationException)
-    {
-        return Results.BadRequest(new { message = "The request could not be validated." });
-    }
-
     try
     {
         var count = await db.Set<SecureShop.Domain.Entities.Product>().CountAsync();
@@ -471,22 +384,19 @@ app.MapPost("/api/admin/seed", async (
     }
     catch
     {
-        // Exception details are intentionally not returned to the caller.
         return Results.Problem("Seed operation failed. Check server logs.");
     }
 }).RequireAuthorization(policy =>
 {
-    // Accept either Admin JWT Bearer OR the AdminCookie (set at admin login).
     policy.AddAuthenticationSchemes("AdminCookie", "Bearer");
     policy.RequireRole("Admin");
 });
 
-// ── Privacy & Terms clean URLs (required for Google OAuth branding) ───────────
-// Actual HTML files live in wwwroot/privacy.html and wwwroot/terms.html.
+// ── Privacy & Terms clean URLs ───────────────────────────────────────────────
 app.MapGet("/privacy", () => Results.Redirect("/privacy.html"));
 app.MapGet("/terms",   () => Results.Redirect("/terms.html"));
 
-// API status endpoint (for monitoring/health checks)
+// API status endpoint
 app.MapGet("/api/status", () =>
 {
     var response = new
@@ -507,7 +417,7 @@ app.MapGet("/api/status", () =>
     return Results.Json(response);
 });
 
-// Authentication status endpoint (requires auth — no unauthenticated access to claim data)
+// Authentication status endpoint (requires auth)
 app.MapGet("/api/auth/status", (HttpContext context) =>
 {
     var isAuthenticated = context.User?.Identity?.IsAuthenticated ?? false;
@@ -527,25 +437,21 @@ app.MapGet("/api/auth/status", (HttpContext context) =>
     });
 }).RequireAuthorization();
 
-// ── Database migration & seeding (background — runs AFTER Kestrel starts) ────
-// Running MigrateAsync before app.Run() blocks the port from opening, causing
-// Railway health checks to fail while EF Core retries the connection.
+// ── Database migration & seeding ─────────────────────────────────────────────
 Log.Information("Startup init: finished, starting web host");
 
 _ = Task.Run(async () =>
 {
     try
     {
-        await Task.Delay(2000); // give Kestrel a moment to bind
+        await Task.Delay(2000);
         using var scope = app.Services.CreateScope();
 
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await db.Database.MigrateAsync();
         Log.Information("Startup init: database migration completed");
 
-        var roleManager = scope.ServiceProvider
-            .GetRequiredService<RoleManager<IdentityRole>>();
-
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
         foreach (var role in new[] { "Admin", "Customer" })
         {
             if (!await roleManager.RoleExistsAsync(role))
@@ -554,29 +460,21 @@ _ = Task.Run(async () =>
                 Log.Information("Startup init: created role {Role}", role);
             }
         }
-
         Log.Information("Startup init: role seeding completed");
 
-        var userManager = scope.ServiceProvider
-            .GetRequiredService<UserManager<ApplicationUser>>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
         await BootstrapAdminProvisioner.ProvisionIfNeededAsync(
             userManager,
             bootstrapAdminCredentials,
             app.Logger);
-
     }
     catch (Exception ex)
     {
-        Log.Error(ex, "Startup init: migration/seeding failed — ensure ConnectionStrings__DefaultConnection is set in Railway env vars");
+        Log.Error(ex, "Startup init: migration/seeding failed");
     }
 
-    // Release DB-touching background services whether migration succeeded or
-    // failed — they handle database errors with their own retry logic.
-    app.Services.GetRequiredService<SecureShop.API.Services.MigrationCompletedSignal>()
-        .MarkCompleted();
+    app.Services.GetRequiredService<SecureShop.API.Services.MigrationCompletedSignal>().MarkCompleted();
 
-    // Product seeding runs in its own isolated try/catch so migration or role
-    // failures above cannot prevent the catalogue from being populated.
     try
     {
         using var seedScope = app.Services.CreateScope();

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SecureShop.Application.DTOs.Orders;
@@ -20,24 +21,17 @@ public class OrdersController : ControllerBase
     private readonly OrderService _svc;
     private readonly ILogger<OrdersController> _logger;
 
-    /// <summary>Injects the order service and logger.</summary>
     public OrdersController(OrderService svc, ILogger<OrdersController> logger)
     {
         _svc = svc;
         _logger = logger;
     }
 
-    /// <summary>
-    /// Convenience property that extracts the authenticated user's ID from the JWT claims.
-    /// </summary>
-    private string UserId => User.FindFirstValue(ClaimTypes.NameIdentifier)!
-;
+    private string UserId => User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+
     /// <summary>
     /// Places a new order for the authenticated user.
-    /// Validates stock availability, reduces inventory, and creates a Stripe payment intent.
     /// </summary>
-    /// <param name="dto">List of products and quantities to order.</param>
-    /// <returns>201 Created with the new order, or 400/500 on failure.</returns>
     [HttpPost]
     [Authorize(AuthenticationSchemes = "Bearer")]
     public async Task<ActionResult<OrderResponseDto>> Create([FromBody] CreateOrderDto dto)
@@ -75,17 +69,13 @@ public class OrdersController : ControllerBase
 
     /// <summary>
     /// Retrieves a single order by ID.
-    /// Admins may view any order; regular users can only view their own.
     /// </summary>
-    /// <param name="id">Order GUID.</param>
-    /// <returns>200 OK with the order, 403 Forbidden if ownership check fails, 404 if not found.</returns>
     [HttpGet("{id:guid}")]
     [Authorize(AuthenticationSchemes = "AdminCookie,Bearer")]
     public async Task<ActionResult<OrderResponseDto>> GetById(Guid id)
     {
         try
         {
-            // Admins can view any order; regular users only their own
             var isAdmin = User.IsInRole("Admin");
             string? userIdFilter = isAdmin ? null : UserId;
             _logger.LogInformation("Fetching order {OrderId}", id);
@@ -109,10 +99,29 @@ public class OrdersController : ControllerBase
     }
 
     /// <summary>
+    /// Exports all orders as a CSV file (admin only).
+    /// </summary>
+    [HttpGet("export")]
+    [Authorize(AuthenticationSchemes = "Bearer", Roles = "Admin")]
+    public async Task<IActionResult> ExportCsv()
+    {
+        var orders = await _svc.GetAllOrdersAsync();
+        
+        var csv = new StringBuilder();
+        csv.AppendLine("Order ID,Date,Customer,Status,Total Amount");
+        
+        foreach (var order in orders)
+        {
+            csv.AppendLine($"{order.Id},{order.CreatedAt:yyyy-MM-dd HH:mm},{order.CustomerEmail},{order.Status},{order.TotalAmount}");
+        }
+        
+        var bytes = Encoding.UTF8.GetBytes(csv.ToString());
+        return File(bytes, "text/csv", $"orders-{DateTime.UtcNow:yyyyMMdd}.csv");
+    }
+
+    /// <summary>
     /// Updates the lifecycle status of an order (admin only).
     /// </summary>
-    /// <param name="id">Order GUID.</param>
-    /// <param name="dto">Numeric status value matching <see cref="Domain.Enums.OrderStatus"/>.</param>
     [HttpPut("{id:guid}/status")]
     [Authorize(AuthenticationSchemes = "AdminCookie,Bearer", Roles = "Admin")]
     public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] UpdateOrderStatusDto dto)
