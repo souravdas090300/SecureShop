@@ -301,6 +301,33 @@
             }
         }
 
+        async function loadOrders() {
+            try {
+                const response = await fetch(`${apiBaseUrl}/api/orders`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    allOrders = Array.isArray(data) ? data : (data.items ?? data.data ?? []);
+                    renderOrders(allOrders);
+                } else {
+                    // 👇 ADD THIS TO SEE THE ACTUAL ERROR
+                    const errorText = await response.text();
+                    console.error(`Orders API Error: Status ${response.status}`, errorText);
+                    
+                    if (response.status === 401) {
+                        showError('Please log in as an admin to view orders');
+                    } else {
+                        showError(`Failed to load orders (Status: ${response.status})`);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading orders:', error);
+                showError('Unable to connect to the server');
+            }
+        }
+
         function applyFilters() {
             const searchTerm = document.getElementById('searchInput').value.toLowerCase();
             const status = document.getElementById('statusFilter').value;
