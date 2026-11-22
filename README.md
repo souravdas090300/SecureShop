@@ -1,6 +1,6 @@
 # SecureShop
 
-A full-stack e-commerce application built with ASP.NET Core 8, Clean Architecture, PostgreSQL, and Stripe (test mode). It combines a Razor Pages storefront, a separate admin area, a JWT-secured REST API, and a payment lifecycle designed to stay correct under retries and concurrent orders.
+A full-stack e-commerce application built with ASP.NET Core 10, Clean Architecture, PostgreSQL, and Stripe (test mode). It combines a Razor Pages storefront, a separate admin area, a JWT-secured REST API, and a payment lifecycle designed to stay correct under retries and concurrent orders.
 
 [![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet)](https://dotnet.microsoft.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://neon.tech/)
